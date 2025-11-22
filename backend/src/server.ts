@@ -20,6 +20,12 @@ app.use(cors({
     // Allow ngrok domains
     if (origin.endsWith('.ngrok-free.app')) return callback(null, true);
 
+    // Allow configured CORS_ORIGIN
+    if (CORS_ORIGIN) {
+      const allowed = CORS_ORIGIN.split(',').map(s => s.trim());
+      if (allowed.includes('*') || allowed.includes(origin)) return callback(null, true);
+    }
+
     callback(new Error('Not allowed by CORS'));
   },
   credentials: true
