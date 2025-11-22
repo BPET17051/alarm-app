@@ -23,9 +23,11 @@ app.use(cors({
     // Allow configured CORS_ORIGIN
     if (CORS_ORIGIN) {
       const allowed = CORS_ORIGIN.split(',').map(s => s.trim());
+      console.log('CORS Check:', { origin, allowed, env: CORS_ORIGIN }); // DEBUG LOG
       if (allowed.includes('*') || allowed.includes(origin)) return callback(null, true);
     }
 
+    console.log('CORS Blocked:', origin); // DEBUG LOG
     callback(new Error('Not allowed by CORS'));
   },
   credentials: true
