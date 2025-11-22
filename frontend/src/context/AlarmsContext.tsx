@@ -33,7 +33,12 @@ export function AlarmsProvider({ children }: { children: ReactNode }) {
     useEffect(() => {
         loadAlarms();
         setJobName(Storage.loadJobName());
-        // Templates loaded via API in separate effect
+
+        // Load templates from API
+        API.getTemplates()
+            .then(setTemplates)
+            .catch(err => console.error('Failed to load templates:', err));
+
         const played = Storage.loadPlayed();
         const today = new Date().toISOString().split('T')[0];
         if (played.date !== today) {
