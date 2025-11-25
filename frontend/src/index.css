@@ -48,3 +48,48 @@
     background-repeat: no-repeat;
   }
 }
+
+/* Compatibility Fallbacks */
+
+/* Fallback for Flexbox Gap */
+@supports not (gap: 10px) {
+  .flex.gap-6 > * + * {
+    margin-left: 1.5rem; /* 24px */
+  }
+  .flex.gap-8 > * + * {
+    margin-left: 2rem; /* 32px */
+  }
+  .flex-col.gap-6 > * + * {
+    margin-left: 0;
+    margin-top: 1.5rem;
+  }
+  .flex-col.gap-8 > * + * {
+    margin-left: 0;
+    margin-top: 2rem;
+  }
+  .space-y-6 > * + * {
+    margin-top: 1.5rem;
+  }
+}
+
+/* Fallback for Backdrop Filter (Glassmorphism) */
+@supports not (backdrop-filter: blur(12px)) {
+  .backdrop-blur-md {
+    background-color: rgba(var(--card), 0.95) !important; /* Higher opacity */
+    backdrop-filter: none;
+  }
+}
+
+/* Fallback for Grid (Basic) */
+@supports not (display: grid) {
+  .grid-cols-12 {
+    display: flex;
+    flex-wrap: wrap;
+  }
+  .lg\:col-span-5 {
+    width: 41.666667%;
+  }
+  .lg\:col-span-7 {
+    width: 58.333333%;
+  }
+}

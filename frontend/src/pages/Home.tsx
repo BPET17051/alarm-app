@@ -8,12 +8,28 @@ import { AlarmList } from '../components/AlarmList';
 import { Controls } from '../components/Controls';
 
 export function Home() {
-    const { items, playedIds, markPlayed } = useAlarms();
-    useScheduler(items, playedIds, markPlayed);
+    const { items, playedIds, markPlayed, isAudioEnabled, enableAudio } = useAlarms();
+    useScheduler(items, playedIds, markPlayed, isAudioEnabled);
     const [selected, setSelected] = useState<Set<string>>(new Set());
 
     return (
         <Layout>
+            {!isAudioEnabled && (
+                <div className="mb-6 bg-yellow-500/20 border border-yellow-500/50 p-4 rounded-lg flex items-center justify-between text-yellow-200 backdrop-blur-md">
+                    <span className="flex items-center gap-2">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                        </svg>
+                        Audio playback is required for alarms
+                    </span>
+                    <button
+                        onClick={() => enableAudio()}
+                        className="px-4 py-2 bg-yellow-500 text-black font-bold rounded hover:bg-yellow-400 transition-colors"
+                    >
+                        Enable Audio
+                    </button>
+                </div>
+            )}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
                 {/* Left Column: Clock & Form */}
                 <section className="lg:col-span-5 space-y-6">

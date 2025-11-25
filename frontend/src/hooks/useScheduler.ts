@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import type { AlarmItem } from '../types';
 import * as API from '../services/api';
 
-export function useScheduler(items: AlarmItem[], playedIds: Set<string>, markPlayed: (id: string, status: 'SENT' | 'FAILED') => void) {
+export function useScheduler(items: AlarmItem[], playedIds: Set<string>, markPlayed: (id: string, status: 'SENT' | 'FAILED') => void, isAudioEnabled: boolean) {
     useEffect(() => {
         const check = () => {
             const now = new Date();
@@ -28,27 +28,42 @@ export function useScheduler(items: AlarmItem[], playedIds: Set<string>, markPla
                 // Let's use a window of 60 seconds.
 
                 if (diff >= 0 && diff < 60 && !playedIds.has(item.id)) {
+                    if (!isAudioEnabled) {
+                        console.warn('Audio not enabled, skipping playback');
+                        markPlayed(item.id, 'FAILED');
+                        return;
+                    }
+
                     // Play audio
                     try {
                         if (item.audioId) {
                             const url = API.getAudioUrl(item.audioId);
                             const audio = new Audio(url);
-                            await audio.play(); // Wait for play to start
+                            const promise = audio.play();
+                            if (promise !== undefined) {
+                                await promise;
+                            }
                             audio.onended = () => markPlayed(item.id, 'SENT');
                             audio.onerror = () => markPlayed(item.id, 'FAILED');
                         } else {
                             // Beep
-                            const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-                            const osc = ctx.createOscillator();
-                            const gain = ctx.createGain();
-                            osc.connect(gain);
-                            gain.connect(ctx.destination);
-                            osc.start();
-                            setTimeout(() => {
-                                osc.stop();
-                                ctx.close();
-                                markPlayed(item.id, 'SENT');
-                            }, 1000);
+                            const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+                            if (AudioContextClass) {
+                                const ctx = new AudioContextClass();
+                                const osc = ctx.createOscillator();
+                                const gain = ctx.createGain();
+                                osc.connect(gain);
+                                gain.connect(ctx.destination);
+                                osc.start();
+                                setTimeout(() => {
+                                    osc.stop();
+                                    ctx.close();
+                                    markPlayed(item.id, 'SENT');
+                                }, 1000);
+                            } else {
+                                console.error('AudioContext not supported');
+                                markPlayed(item.id, 'FAILED');
+                            }
                         }
                     } catch (e) {
                         console.error(e);
@@ -62,5 +77,5 @@ export function useScheduler(items: AlarmItem[], playedIds: Set<string>, markPla
         check(); // Initial check
 
         return () => clearInterval(interval);
-    }, [items, playedIds, markPlayed]);
+    }, [items, playedIds, markPlayed, isAudioEnabled]);
 }

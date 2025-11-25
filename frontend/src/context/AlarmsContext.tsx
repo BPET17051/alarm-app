@@ -19,6 +19,8 @@ interface AlarmsContextType {
     saveTemplate: (name: string) => void;
     loadTemplate: (name: string) => Promise<void>;
     deleteTemplate: (name: string) => void;
+    isAudioEnabled: boolean;
+    enableAudio: () => Promise<void>;
 }
 
 const AlarmsContext = createContext<AlarmsContextType | undefined>(undefined);
@@ -27,7 +29,9 @@ export function AlarmsProvider({ children }: { children: ReactNode }) {
     const [items, setItems] = useState<AlarmItem[]>([]);
     const [jobName, setJobName] = useState('');
     const [templates, setTemplates] = useState<Template[]>([]);
+
     const [playedIds, setPlayedIds] = useState<Set<string>>(new Set());
+    const [isAudioEnabled, setIsAudioEnabled] = useState(false);
 
     // Load initial state
     useEffect(() => {
@@ -198,6 +202,31 @@ export function AlarmsProvider({ children }: { children: ReactNode }) {
         }
     }, []);
 
+    const enableAudio = useCallback(async () => {
+        try {
+            const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+            if (!AudioContextClass) {
+                console.warn('AudioContext not supported');
+                setIsAudioEnabled(true);
+                return;
+            }
+            const ctx = new AudioContextClass();
+            if (ctx.state === 'suspended') {
+                await ctx.resume();
+            }
+            // Play a silent buffer to unlock audio
+            const buffer = ctx.createBuffer(1, 1, 22050);
+            const source = ctx.createBufferSource();
+            source.buffer = buffer;
+            source.connect(ctx.destination);
+            source.start(0);
+
+            setIsAudioEnabled(true);
+        } catch (e) {
+            console.error('Failed to enable audio', e);
+        }
+    }, []);
+
     const value = {
         items,
         jobName,
@@ -213,7 +242,10 @@ export function AlarmsProvider({ children }: { children: ReactNode }) {
         equalizeGaps,
         saveTemplate,
         loadTemplate,
-        deleteTemplate
+
+        deleteTemplate,
+        isAudioEnabled,
+        enableAudio
     };
 
     return (
