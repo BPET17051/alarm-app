@@ -10,7 +10,7 @@ export function AlarmForm() {
     const [label, setLabel] = useState('');
     const [file, setFile] = useState<File | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const [uploading, setUploading] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -18,35 +18,34 @@ export function AlarmForm() {
 
         if (h < 0 || h > 23 || m < 0 || m > 59 || s < 0 || s > 59) return;
 
-        let audioId = null;
-        let audioName = '';
+        setIsSubmitting(true);
 
-        if (file) {
-            try {
-                setUploading(true);
+        try {
+            let audioId = null;
+            let audioName = '';
+
+            if (file) {
                 const saved = await API.uploadAudio(file);
                 audioId = saved.id;
                 audioName = file.name;
-            } catch (e: any) {
-                console.error('Upload failed', e);
-                alert(`Failed to upload audio: ${e.message}`);
-                setUploading(false);
-                return;
-            } finally {
-                setUploading(false);
             }
+
+            await addItem(h, m, s, label, audioId, audioName);
+
+            // Show success feedback
+            setShowSuccess(true);
+            setTimeout(() => setShowSuccess(false), 2000);
+
+            // Reset form
+            setLabel('');
+            setFile(null);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+        } catch (e: any) {
+            console.error('Operation failed', e);
+            alert(`Failed: ${e.message}`);
+        } finally {
+            setIsSubmitting(false);
         }
-
-        await addItem(h, m, s, label, audioId, audioName);
-
-        // Show success feedback
-        setShowSuccess(true);
-        setTimeout(() => setShowSuccess(false), 2000);
-
-        // Reset form
-        setLabel('');
-        setFile(null);
-        if (fileInputRef.current) fileInputRef.current.value = '';
     };
 
     const isValid = !isNaN(h) && !isNaN(m) && !isNaN(s);
@@ -157,17 +156,17 @@ export function AlarmForm() {
             {/* Submit Button */}
             <button
                 type="submit"
-                disabled={!isValid || uploading}
+                disabled={!isValid || isSubmitting}
                 className="w-full bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3.5 px-4 rounded-xl transition-all transform active:scale-[0.98] shadow-lg shadow-primary/25 hover:shadow-primary/40 disabled:shadow-none flex items-center justify-center gap-2"
-                aria-label={uploading ? 'Uploading audio file' : 'Add alarm'}
+                aria-label={isSubmitting ? 'Saving alarm...' : 'Add alarm'}
             >
-                {uploading ? (
+                {isSubmitting ? (
                     <>
                         <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
-                        Uploading...
+                        {file ? 'Uploading & Saving...' : 'Saving...'}
                     </>
                 ) : showSuccess ? (
                     <>
