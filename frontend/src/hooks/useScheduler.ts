@@ -1,8 +1,10 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import type { AlarmItem } from '../types';
 import * as API from '../services/api';
 
 export function useScheduler(items: AlarmItem[], playedIds: Set<string>, markPlayed: (id: string, status: 'SENT' | 'FAILED') => void, isAudioEnabled: boolean) {
+    const triggeredAlarms = useRef<Set<string>>(new Set());
+
     useEffect(() => {
         const check = () => {
             const now = new Date();
@@ -16,18 +18,14 @@ export function useScheduler(items: AlarmItem[], playedIds: Set<string>, markPla
                 const itemS = item.s || 0;
                 const itemTotalSeconds = item.h * 3600 + item.m * 60 + itemS;
 
-                // Check if the alarm time is within the last 60 seconds (to handle throttling/lag)
-                // and hasn't been played yet.
-                // Handle day wrap-around (e.g. midnight) if needed, but for now assume same day.
                 const diff = nowTotalSeconds - itemTotalSeconds;
 
-                // We check if diff is between 0 and 2 to avoid re-triggering too old alarms if the user reloads,
-                // but the user complained about "late", so maybe we should allow a larger window?
-                // If the browser throttles to 1 minute, we need a window of at least 60s.
-                // However, we rely on playedIds to prevent double playing.
-                // Let's use a window of 60 seconds.
+                // Check if alarm is within window, not already played (server/context state), AND not currently triggering (local state)
+                if (diff >= 0 && diff < 60 && !playedIds.has(item.id) && !triggeredAlarms.current.has(item.id)) {
 
-                if (diff >= 0 && diff < 60 && !playedIds.has(item.id)) {
+                    // Lock immediately
+                    triggeredAlarms.current.add(item.id);
+
                     if (!isAudioEnabled) {
                         console.warn('Audio not enabled, skipping playback');
                         markPlayed(item.id, 'FAILED');
