@@ -8,28 +8,59 @@ import { AlarmList } from '../components/AlarmList';
 import { Controls } from '../components/Controls';
 
 export function Home() {
-    const { items, playedIds, markPlayed, isAudioEnabled, enableAudio } = useAlarms();
+    const { items, playedIds, markPlayed, isAudioEnabled, enableAudio, disableAudio } = useAlarms();
     useScheduler(items, playedIds, markPlayed, isAudioEnabled);
     const [selected, setSelected] = useState<Set<string>>(new Set());
 
     return (
         <Layout>
-            {!isAudioEnabled && (
-                <div className="mb-6 bg-yellow-500/20 border border-yellow-500/50 p-4 rounded-lg flex items-center justify-between text-yellow-200 backdrop-blur-md">
-                    <span className="flex items-center gap-2">
+            <div className="mb-6 bg-card/90 backdrop-blur-md border border-line rounded-2xl p-4 flex items-center justify-between shadow-lg">
+                <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-full ${isAudioEnabled ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                        {isAudioEnabled ? (
+                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                            </svg>
+                        ) : (
+                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                            </svg>
+                        )}
+                    </div>
+                    <div>
+                        <h3 className="font-semibold text-fg">Audio Status</h3>
+                        <p className="text-sm text-muted">{isAudioEnabled ? 'Audio is enabled' : 'Audio is disabled'}</p>
+                    </div>
+                </div>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={() => enableAudio()}
+                        disabled={isAudioEnabled}
+                        className={`p-2 rounded-lg transition-colors ${isAudioEnabled
+                            ? 'bg-green-500/20 text-green-400 cursor-default'
+                            : 'bg-line hover:bg-line/80 text-muted hover:text-fg'}`}
+                        title="Enable Audio"
+                    >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
                         </svg>
-                        Audio playback is required for alarms
-                    </span>
+                    </button>
                     <button
-                        onClick={() => enableAudio()}
-                        className="px-4 py-2 bg-yellow-500 text-black font-bold rounded hover:bg-yellow-400 transition-colors"
+                        onClick={() => disableAudio()}
+                        disabled={!isAudioEnabled}
+                        className={`p-2 rounded-lg transition-colors ${!isAudioEnabled
+                            ? 'bg-red-500/20 text-red-400 cursor-default'
+                            : 'bg-line hover:bg-line/80 text-muted hover:text-fg'}`}
+                        title="Disable Audio"
                     >
-                        Enable Audio
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                        </svg>
                     </button>
                 </div>
-            )}
+            </div>
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
                 {/* Left Column: Clock & Form */}
                 <section className="lg:col-span-5 space-y-6">

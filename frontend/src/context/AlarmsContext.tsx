@@ -21,6 +21,7 @@ interface AlarmsContextType {
     deleteTemplate: (name: string) => void;
     isAudioEnabled: boolean;
     enableAudio: () => Promise<void>;
+    disableAudio: () => void;
 }
 
 const AlarmsContext = createContext<AlarmsContextType | undefined>(undefined);
@@ -227,6 +228,10 @@ export function AlarmsProvider({ children }: { children: ReactNode }) {
         }
     }, []);
 
+    const disableAudio = useCallback(() => {
+        setIsAudioEnabled(false);
+    }, []);
+
     const value = {
         items,
         jobName,
@@ -245,7 +250,8 @@ export function AlarmsProvider({ children }: { children: ReactNode }) {
 
         deleteTemplate,
         isAudioEnabled,
-        enableAudio
+        enableAudio,
+        disableAudio
     };
 
     return (
