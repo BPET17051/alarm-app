@@ -77,23 +77,34 @@ export function Controls({ selected }: ControlsProps) {
 
                 {/* Clear All - Danger Action */}
                 <button
-                    onClick={clearAll}
+                    onClick={() => {
+                        if (window.confirm('ลบ Alarm ทั้งหมด? การดำเนินการนี้ไม่สามารถย้อนกลับได้')) {
+                            clearAll();
+                        }
+                    }}
                     className="ml-auto px-4 py-2.5 rounded-lg border border-danger/50 text-danger hover:bg-danger/10 hover:border-danger transition-all text-sm font-semibold flex items-center gap-2"
                     aria-label="Clear all alarms"
                 >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
                     </svg>
-                    Clear All
+                    ล้างทั้งหมด
                 </button>
             </div>
 
             {/* Shift Modal */}
             {showShift && (
-                <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 backdrop-blur-sm animate-fade-in" onClick={() => setShowShift(false)}>
+                <div
+                    className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 backdrop-blur-sm animate-fade-in"
+                    onClick={() => setShowShift(false)}
+                    onKeyDown={(e) => e.key === 'Escape' && setShowShift(false)}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="shift-modal-title"
+                >
                     <div className="bg-card border border-line p-6 rounded-2xl shadow-2xl w-96 animate-scale-in" onClick={(e) => e.stopPropagation()}>
-                        <h3 className="text-lg font-bold mb-2">Shift Selected Alarms</h3>
-                        <p className="text-sm text-muted/70 mb-4">Adjust {selected.size} alarm(s) by a specific time offset</p>
+                        <h3 id="shift-modal-title" className="text-lg font-bold mb-2">เลื่อนเวลา Alarm</h3>
+                        <p className="text-sm text-muted/70 mb-4">ปรับเวลา {selected.size} Alarm ที่เลือก</p>
                         <div className="flex gap-2 mb-6">
                             <input
                                 type="number"
@@ -132,10 +143,17 @@ export function Controls({ selected }: ControlsProps) {
 
             {/* Equalize Modal */}
             {showEqualize && (
-                <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 backdrop-blur-sm animate-fade-in" onClick={() => setShowEqualize(false)}>
+                <div
+                    className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 backdrop-blur-sm animate-fade-in"
+                    onClick={() => setShowEqualize(false)}
+                    onKeyDown={(e) => e.key === 'Escape' && setShowEqualize(false)}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="equalize-modal-title"
+                >
                     <div className="bg-card border border-line p-6 rounded-2xl shadow-2xl w-96 animate-scale-in" onClick={(e) => e.stopPropagation()}>
-                        <h3 className="text-lg font-bold mb-2">Equalize Gaps</h3>
-                        <p className="text-sm text-muted/70 mb-4">Set equal spacing between {selected.size} selected alarms</p>
+                        <h3 id="equalize-modal-title" className="text-lg font-bold mb-2">จัดเวลาเท่าๆ กัน</h3>
+                        <p className="text-sm text-muted/70 mb-4">ตั้งค่าระยะห่างเท่ากันระหว่าง {selected.size} Alarm</p>
                         <div className="flex gap-2 mb-6">
                             <input
                                 type="number"
@@ -175,10 +193,17 @@ export function Controls({ selected }: ControlsProps) {
 
             {/* Save Template Modal */}
             {showSave && (
-                <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 backdrop-blur-sm animate-fade-in" onClick={() => setShowSave(false)}>
+                <div
+                    className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 backdrop-blur-sm animate-fade-in"
+                    onClick={() => setShowSave(false)}
+                    onKeyDown={(e) => e.key === 'Escape' && setShowSave(false)}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="save-modal-title"
+                >
                     <div className="bg-card border border-line p-6 rounded-2xl shadow-2xl w-96 animate-scale-in" onClick={(e) => e.stopPropagation()}>
-                        <h3 className="text-lg font-bold mb-2">Save Template</h3>
-                        <p className="text-sm text-muted/70 mb-4">Save current alarms as a reusable template</p>
+                        <h3 id="save-modal-title" className="text-lg font-bold mb-2">บันทึก Template</h3>
+                        <p className="text-sm text-muted/70 mb-4">บันทึก Alarm ปัจจุบันเป็น Template</p>
                         <input
                             type="text"
                             placeholder="Template name..."
@@ -205,10 +230,17 @@ export function Controls({ selected }: ControlsProps) {
 
             {/* Load Template Modal */}
             {showLoad && (
-                <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 backdrop-blur-sm animate-fade-in" onClick={() => setShowLoad(false)}>
+                <div
+                    className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 backdrop-blur-sm animate-fade-in"
+                    onClick={() => setShowLoad(false)}
+                    onKeyDown={(e) => e.key === 'Escape' && setShowLoad(false)}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="load-modal-title"
+                >
                     <div className="bg-card border border-line p-6 rounded-2xl shadow-2xl w-96 max-h-[80vh] flex flex-col animate-scale-in" onClick={(e) => e.stopPropagation()}>
-                        <h3 className="text-lg font-bold mb-2">Load Template</h3>
-                        <p className="text-sm text-muted/70 mb-4">Choose a template to load</p>
+                        <h3 id="load-modal-title" className="text-lg font-bold mb-2">โหลด Template</h3>
+                        <p className="text-sm text-muted/70 mb-4">เลือก Template ที่ต้องการโหลด</p>
                         <div className="flex-1 overflow-y-auto space-y-2 mb-6 min-h-[100px]">
                             {templates.length === 0 ? (
                                 <div className="text-center py-8 text-muted/50">
