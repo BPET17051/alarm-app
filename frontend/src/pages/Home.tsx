@@ -14,10 +14,10 @@ export function Home() {
 
     return (
         <Layout>
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 xl:gap-8">
                 {/* Left Column: Clock & Form */}
-                <section className="lg:col-span-5 space-y-6">
-                    <div className="bg-card/90 backdrop-blur-md border border-line rounded-2xl p-6 lg:p-8 shadow-2xl">
+                <section className="xl:col-span-5 space-y-6">
+                    <div className="bg-card/90 backdrop-blur-md border border-line rounded-2xl p-6 xl:p-8 shadow-2xl">
                         <Clock />
                         <div className="my-6 border-t border-line/50"></div>
                         <AlarmForm />
@@ -25,8 +25,8 @@ export function Home() {
                 </section>
 
                 {/* Right Column: List */}
-                <section className="lg:col-span-7">
-                    <div className="bg-card/90 backdrop-blur-md border border-line rounded-2xl p-6 lg:p-8 shadow-2xl min-h-[500px] flex flex-col">
+                <section className="xl:col-span-7">
+                    <div className="bg-card/90 backdrop-blur-md border border-line rounded-2xl p-6 xl:p-8 shadow-2xl min-h-[500px] flex flex-col">
                         <div className="flex items-center justify-between mb-4">
                             <h2 className="text-xl font-bold text-muted flex items-center gap-2">
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
