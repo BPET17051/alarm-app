@@ -2,12 +2,19 @@ import { useEffect, useRef } from 'react';
 import type { AlarmItem } from '../types';
 import * as API from '../services/api';
 
-export function useScheduler(items: AlarmItem[], playedIds: Set<string>, markPlayed: (id: string, status: 'SENT' | 'FAILED') => void, isAudioEnabled: boolean) {
+export function useScheduler(
+    items: AlarmItem[],
+    playedIds: Set<string>,
+    markPlayed: (id: string, status: 'SENT' | 'FAILED') => void,
+    isAudioEnabled: boolean,
+    serverTime?: Date  // Optional synced server time
+) {
     const triggeredAlarms = useRef<Set<string>>(new Set());
 
     useEffect(() => {
         const check = () => {
-            const now = new Date();
+            // Use synced server time if available, otherwise fallback to local time
+            const now = serverTime || new Date();
             const h = now.getHours();
             const m = now.getMinutes();
             const s = now.getSeconds();
@@ -75,5 +82,5 @@ export function useScheduler(items: AlarmItem[], playedIds: Set<string>, markPla
         check(); // Initial check
 
         return () => clearInterval(interval);
-    }, [items, playedIds, markPlayed, isAudioEnabled]);
+    }, [items, playedIds, markPlayed, isAudioEnabled, serverTime]);
 }

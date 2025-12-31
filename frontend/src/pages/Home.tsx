@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Layout } from '../components/Layout';
 import { useAlarms } from '../hooks/useAlarms';
 import { useScheduler } from '../hooks/useScheduler';
+import { useTimeSync } from '../hooks/useTimeSync';
 import { Clock } from '../components/Clock';
 import { AlarmForm } from '../components/AlarmForm';
 import { AlarmList } from '../components/AlarmList';
@@ -9,7 +10,8 @@ import { Controls } from '../components/Controls';
 
 export function Home() {
     const { items, playedIds, markPlayed, isAudioEnabled, enableAudio, disableAudio } = useAlarms();
-    useScheduler(items, playedIds, markPlayed, isAudioEnabled);
+    const { serverTime } = useTimeSync();
+    useScheduler(items, playedIds, markPlayed, isAudioEnabled, serverTime);
     const [selected, setSelected] = useState<Set<string>>(new Set());
 
     return (
