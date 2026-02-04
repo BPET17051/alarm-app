@@ -19,8 +19,8 @@ export function useTimeSync(): TimeSyncState {
     const [isSyncing, setIsSyncing] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [currentTime, setCurrentTime] = useState(new Date());
-    const syncIntervalRef = useRef<number>();
-    const clockIntervalRef = useRef<number>();
+    const syncIntervalRef = useRef<number | undefined>(undefined);
+    const clockIntervalRef = useRef<number | undefined>(undefined);
 
     // Function to sync time with server
     const syncTime = async () => {

@@ -71,9 +71,10 @@ export function AlarmForm() {
             setSelectedAudioId(null);
             setSelectedAudioName('');
 
-        } catch (e: any) {
+        } catch (e: unknown) {
             console.error('Operation failed', e);
-            alert(`Failed: ${e.message}`);
+            const msg = e instanceof Error ? e.message : String(e);
+            alert(`Failed: ${msg}`);
         } finally {
             setIsSubmitting(false);
         }

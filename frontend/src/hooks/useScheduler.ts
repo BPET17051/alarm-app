@@ -52,7 +52,7 @@ export function useScheduler(
                             audio.onerror = () => markPlayed(item.id, 'FAILED');
                         } else {
                             // Beep
-                            const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+                            const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
                             if (AudioContextClass) {
                                 const ctx = new AudioContextClass();
                                 const osc = ctx.createOscillator();

@@ -28,41 +28,40 @@ const AlarmsContext = createContext<AlarmsContextType | undefined>(undefined);
 
 export function AlarmsProvider({ children }: { children: ReactNode }) {
     const [items, setItems] = useState<AlarmItem[]>([]);
-    const [jobName, setJobName] = useState('');
+    const [jobName, setJobName] = useState(() => Storage.loadJobName());
     const [templates, setTemplates] = useState<Template[]>([]);
 
-    const [playedIds, setPlayedIds] = useState<Set<string>>(new Set());
+    const [playedIds, setPlayedIds] = useState<Set<string>>(() => {
+        const played = Storage.loadPlayed();
+        const today = new Date().toISOString().split('T')[0];
+        if (played.date !== today) {
+            Storage.savePlayed(today, []);
+            return new Set();
+        } else {
+            return new Set(played.ids);
+        }
+    });
     const [isAudioEnabled, setIsAudioEnabled] = useState(false);
 
     // Load initial state
     useEffect(() => {
+        const loadAlarms = async () => {
+            try {
+                const data = await API.getAlarms();
+                console.log('Loaded alarms:', data);
+                setItems(data);
+            } catch (e: unknown) {
+                console.error('Failed to load alarms', e);
+            }
+        };
+
         loadAlarms();
-        setJobName(Storage.loadJobName());
 
         // Load templates from API
         API.getTemplates()
             .then(setTemplates)
             .catch(err => console.error('Failed to load templates:', err));
-
-        const played = Storage.loadPlayed();
-        const today = new Date().toISOString().split('T')[0];
-        if (played.date !== today) {
-            Storage.savePlayed(today, []);
-            setPlayedIds(new Set());
-        } else {
-            setPlayedIds(new Set(played.ids));
-        }
     }, []);
-
-    const loadAlarms = async () => {
-        try {
-            const data = await API.getAlarms();
-            console.log('Loaded alarms:', data);
-            setItems(data);
-        } catch (e) {
-            console.error('Failed to load alarms', e);
-        }
-    };
 
     // Persistence effects
     useEffect(() => {
@@ -89,9 +88,10 @@ export function AlarmsProvider({ children }: { children: ReactNode }) {
                 console.log('New items state:', next);
                 return next;
             });
-        } catch (e: any) {
+        } catch (e: unknown) {
             console.error('Failed to add alarm', e);
-            alert(`Failed to add alarm: ${e.message}`);
+            const msg = e instanceof Error ? e.message : String(e);
+            alert(`Failed to add alarm: ${msg}`);
         }
     }, []);
 
@@ -99,7 +99,7 @@ export function AlarmsProvider({ children }: { children: ReactNode }) {
         try {
             const updated = await API.updateAlarm(id, updates);
             setItems(prev => prev.map(item => item.id === id ? updated : item).sort((a, b) => (a.h * 3600 + a.m * 60 + a.s) - (b.h * 3600 + b.m * 60 + b.s)));
-        } catch (e) {
+        } catch (e: unknown) {
             console.error('Failed to update alarm', e);
         }
     }, []);
@@ -108,7 +108,7 @@ export function AlarmsProvider({ children }: { children: ReactNode }) {
         try {
             await API.deleteAlarm(id);
             setItems(prev => prev.filter(item => item.id !== id));
-        } catch (e) {
+        } catch (e: unknown) {
             console.error('Failed to delete alarm', e);
         }
     }, []);
@@ -117,7 +117,7 @@ export function AlarmsProvider({ children }: { children: ReactNode }) {
         try {
             await API.clearAlarms();
             setItems([]);
-        } catch (e) {
+        } catch (e: unknown) {
             console.error('Failed to clear alarms', e);
         }
     }, []);
@@ -133,7 +133,7 @@ export function AlarmsProvider({ children }: { children: ReactNode }) {
         // Sync with backend
         try {
             await API.updateAlarm(id, { notify_status: status });
-        } catch (e) {
+        } catch (e: unknown) {
             console.error('Failed to update status', e);
         }
     }, []);
@@ -178,7 +178,7 @@ export function AlarmsProvider({ children }: { children: ReactNode }) {
             await API.saveTemplate(name, items);
             const tpls = await API.getTemplates();
             setTemplates(tpls);
-        } catch (e) {
+        } catch (e: unknown) {
             console.error(e);
         }
     }, [items]);
@@ -198,14 +198,14 @@ export function AlarmsProvider({ children }: { children: ReactNode }) {
         try {
             await API.deleteTemplate(name);
             setTemplates(prev => prev.filter(t => t.name !== name));
-        } catch (e) {
+        } catch (e: unknown) {
             console.error(e);
         }
     }, []);
 
     const enableAudio = useCallback(async () => {
         try {
-            const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+            const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
             if (!AudioContextClass) {
                 console.warn('AudioContext not supported');
                 setIsAudioEnabled(true);
@@ -223,7 +223,7 @@ export function AlarmsProvider({ children }: { children: ReactNode }) {
             source.start(0);
 
             setIsAudioEnabled(true);
-        } catch (e) {
+        } catch (e: unknown) {
             console.error('Failed to enable audio', e);
         }
     }, []);
@@ -261,6 +261,7 @@ export function AlarmsProvider({ children }: { children: ReactNode }) {
     );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAlarmsContext() {
     const context = useContext(AlarmsContext);
     if (context === undefined) {

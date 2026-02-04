@@ -44,9 +44,10 @@ export function EditAlarmModal({ alarm, isOpen, onClose, onUpdate }: EditAlarmMo
                 const saved = await API.uploadAudio(file);
                 audioId = saved.id;
                 audioName = file.name;
-            } catch (e: any) {
+            } catch (e: unknown) {
                 console.error('Upload failed', e);
-                alert(`Failed to upload audio: ${e.message}`);
+                const msg = e instanceof Error ? e.message : String(e);
+                alert(`Failed to upload audio: ${msg}`);
                 setUploading(false);
                 return;
             } finally {
