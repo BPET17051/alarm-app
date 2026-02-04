@@ -79,6 +79,7 @@ router.post('/', upload.single('file'), async (req, res) => {
 
 router.delete('/:name', async (req, res) => {
   const { name } = req.params;
+  console.log(`🗑️ Deleting audio file: "${name}"`); // Debug log
 
   const { error } = await supabase.storage
     .from('audio')

@@ -74,7 +74,7 @@ export async function uploadAudio(file: File, customName?: string): Promise<{ id
 }
 
 export async function deleteAudio(fileName: string): Promise<void> {
-    const res = await fetch(`${API_URL}/audio/${fileName}`, { method: 'DELETE' });
+    const res = await fetch(`${API_URL}/audio/${encodeURIComponent(fileName)}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Failed to delete audio file');
 }
 
