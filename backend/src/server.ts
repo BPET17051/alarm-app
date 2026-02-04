@@ -48,6 +48,10 @@ app.use('/audio/static', express.static(path.resolve(AUDIO_DIR), {
 
 app.get('/health', (_req, res) => res.json({ ok: true, timestamp: new Date().toISOString() }));
 
+app.get('/api/time', (_req, res) => {
+  res.json({ iso: new Date().toISOString() });
+});
+
 app.use('/api/auth', authRouter);
 app.use('/api/templates', templateRouter);
 app.use('/api/audio', audioRouter);

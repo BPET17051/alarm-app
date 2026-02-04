@@ -12,7 +12,7 @@ interface TimeSyncState {
 }
 
 const SYNC_INTERVAL = 5 * 60 * 1000; // Re-sync every 5 minutes
-const WORLD_TIME_API = 'https://worldtimeapi.org/api/timezone/Asia/Bangkok';
+const TIME_API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:4000/api') + '/time';
 
 export function useTimeSync(): TimeSyncState {
     const [offset, setOffset] = useState(0);
@@ -29,7 +29,7 @@ export function useTimeSync(): TimeSyncState {
 
         try {
             const startTime = Date.now();
-            const response = await fetch(WORLD_TIME_API);
+            const response = await fetch(TIME_API_URL);
 
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}`);
@@ -40,7 +40,7 @@ export function useTimeSync(): TimeSyncState {
 
             // Account for network latency (round trip time / 2)
             const latency = (endTime - startTime) / 2;
-            const serverTimestamp = new Date(data.datetime).getTime();
+            const serverTimestamp = new Date(data.iso).getTime();
             const adjustedServerTime = serverTimestamp + latency;
 
             // Calculate offset: positive means local clock is ahead
