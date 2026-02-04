@@ -22,9 +22,12 @@ router.get('/', async (req, res) => {
       .from('audio')
       .getPublicUrl(file.name);
 
+    // Try to get display name from metadata, fallback to filename
+    const displayName = file.metadata?.displayName || file.name;
+
     return {
       id: file.name,
-      name: decodeURIComponent(file.name), // Decode for display
+      name: displayName,
       url: publicUrlData.publicUrl,
       size: file.metadata?.size,
       created_at: file.created_at
@@ -43,23 +46,29 @@ router.post('/', upload.single('file'), async (req, res) => {
   const fileExt = file.originalname.split('.').pop();
 
   // Use custom name if provided, otherwise original name
-  let rawName = req.body.customName || file.originalname;
+  let displayName = req.body.customName || file.originalname;
   // Ensure extension is preserved or added
-  if (!rawName.toLowerCase().endsWith(`.${fileExt?.toLowerCase()}`)) {
-    rawName = `${rawName}.${fileExt}`;
+  if (!displayName.toLowerCase().endsWith(`.${fileExt?.toLowerCase()}`)) {
+    displayName = `${displayName}.${fileExt}`;
   }
 
-  // Sanitize filename: Just trim whitespace. 
-  // We rely on encodeURIComponent to handle special chars safe for storage.
-  const sanitized = rawName.trim();
-  // Encode to ensure storage key validity (Supabase/S3 issue with Thai chars)
-  const filePath = encodeURIComponent(sanitized);
+  // Generate a safe ASCII filename for storage (timestamp-based)
+  // This avoids Supabase storage key issues with Thai/special characters
+  const timestamp = Date.now();
+  const safeExt = fileExt?.replace(/[^a-zA-Z0-9]/g, '') || 'mp3';
+  const filePath = `${timestamp}.${safeExt}`;
+
+  // Store the display name in metadata so we can retrieve it later
+  const metadata = {
+    displayName: displayName
+  };
 
   const { data, error } = await supabase.storage
     .from('audio')
     .upload(filePath, file.buffer, {
       contentType: file.mimetype,
-      upsert: true
+      upsert: true,
+      metadata: metadata
     });
 
   if (error) {
@@ -74,7 +83,7 @@ router.post('/', upload.single('file'), async (req, res) => {
 
   res.status(201).json({
     id: filePath,
-    name: decodeURIComponent(filePath), // Return decoded for display
+    name: displayName, // Return the original display name
     url: publicUrlData.publicUrl
   });
 });
