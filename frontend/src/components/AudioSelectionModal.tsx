@@ -57,14 +57,19 @@ export function AudioSelectionModal({ isOpen, onClose, onConfirm, currentSelecti
         }
     };
 
-    const handleDeleteAudio = async (e: React.MouseEvent, fileName: string) => {
+    const handleDeleteAudio = async (e: React.MouseEvent, fileId: string) => {
         e.stopPropagation();
-        if (!confirm(`Are you sure you want to delete "${fileName}"?`)) return;
+
+        // Find the display name for confirmation message
+        const audioFile = audioFiles.find(f => f.id === fileId);
+        const displayName = audioFile?.name || fileId;
+
+        if (!confirm(`Are you sure you want to delete "${displayName}"?`)) return;
 
         try {
-            await API.deleteAudio(fileName);
+            await API.deleteAudio(fileId);
             loadAudioFiles(); // Refresh list
-            if (selectedId === fileName) {
+            if (selectedId === fileId) {
                 setSelectedId(null);
                 setSelectedName('');
             }
@@ -161,7 +166,7 @@ export function AudioSelectionModal({ isOpen, onClose, onConfirm, currentSelecti
                                                 )}
                                                 <button
                                                     type="button"
-                                                    onClick={(e) => handleDeleteAudio(e, audio.name)}
+                                                    onClick={(e) => handleDeleteAudio(e, audio.id)}
                                                     className="p-1.5 hover:bg-red-500/20 text-muted hover:text-red-500 rounded transition-all"
                                                     title="Delete file"
                                                 >
