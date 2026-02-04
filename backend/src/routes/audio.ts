@@ -5,6 +5,35 @@ import supabase from '../db';
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
+// List available audio files
+router.get('/', async (req, res) => {
+  const { data, error } = await supabase.storage
+    .from('audio')
+    .list();
+
+  if (error) {
+    console.error('Supabase list error:', error);
+    return res.status(500).json({ message: 'Failed to list audio files' });
+  }
+
+  // Map to simple objects
+  const files = data.map(file => {
+    const { data: publicUrlData } = supabase.storage
+      .from('audio')
+      .getPublicUrl(file.name);
+
+    return {
+      id: file.name,
+      name: file.name,
+      url: publicUrlData.publicUrl,
+      size: file.metadata?.size,
+      created_at: file.created_at
+    };
+  });
+
+  res.json(files);
+});
+
 router.post('/', upload.single('file'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ message: 'No file uploaded' });
@@ -12,14 +41,23 @@ router.post('/', upload.single('file'), async (req, res) => {
 
   const file = req.file;
   const fileExt = file.originalname.split('.').pop();
-  const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-  const filePath = `${fileName}`;
+
+  // Use custom name if provided, otherwise original name
+  let rawName = req.body.customName || file.originalname;
+  // Ensure extension is preserved or added
+  if (!rawName.toLowerCase().endsWith(`.${fileExt?.toLowerCase()}`)) {
+    rawName = `${rawName}.${fileExt}`;
+  }
+
+  // Sanitize filename to avoid issues
+  const sanitized = rawName.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+  const filePath = sanitized;
 
   const { data, error } = await supabase.storage
     .from('audio')
     .upload(filePath, file.buffer, {
       contentType: file.mimetype,
-      upsert: false
+      upsert: true
     });
 
   if (error) {
@@ -33,7 +71,8 @@ router.post('/', upload.single('file'), async (req, res) => {
     .getPublicUrl(filePath);
 
   res.status(201).json({
-    id: filePath, // We use the path as the ID
+    id: filePath,
+    name: filePath,
     url: publicUrlData.publicUrl
   });
 });

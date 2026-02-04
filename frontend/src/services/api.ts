@@ -38,9 +38,18 @@ export async function clearAlarms(): Promise<void> {
     if (!res.ok) throw new Error('Failed to clear alarms');
 }
 
-export async function uploadAudio(file: File): Promise<{ id: string; url: string }> {
+export async function getAudioFiles(): Promise<{ id: string; name: string; url: string; size?: number; created_at?: string }[]> {
+    const res = await fetch(`${API_URL}/audio`);
+    if (!res.ok) throw new Error('Failed to fetch audio files');
+    return res.json();
+}
+
+export async function uploadAudio(file: File, customName?: string): Promise<{ id: string; name: string; url: string }> {
     const formData = new FormData();
     formData.append('file', file);
+    if (customName) {
+        formData.append('customName', customName);
+    }
 
     // Note: The backend requires authentication for uploads.
     // For this phase, we assume the backend might need to be relaxed or we need to implement auth.

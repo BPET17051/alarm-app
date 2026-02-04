@@ -13,6 +13,29 @@ export function AlarmForm() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
 
+    // New state for audio management
+    const [audioSource, setAudioSource] = useState<'upload' | 'select'>('upload');
+    const [audioFiles, setAudioFiles] = useState<{ id: string; name: string; url: string }[]>([]);
+    const [isLoadingAudio, setIsLoadingAudio] = useState(false);
+    const [selectedAudioId, setSelectedAudioId] = useState<string | null>(null);
+    const [selectedAudioName, setSelectedAudioName] = useState<string>('');
+
+    const loadAudioFiles = async () => {
+        setIsLoadingAudio(true);
+        try {
+            const files = await API.getAudioFiles();
+            setAudioFiles(files);
+        } catch (e) {
+            console.error('Failed to load audio files', e);
+        } finally {
+            setIsLoadingAudio(false);
+        }
+    };
+
+    // Load audio files when switching to select mode, or just rely on manual refresh/click
+    // Better to load when the component mounts if we want it ready? 
+    // Or just load when user clicks "Select Existing" (handled in the button click)
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
@@ -24,10 +47,13 @@ export function AlarmForm() {
             let audioId = null;
             let audioName = '';
 
-            if (file) {
-                const saved = await API.uploadAudio(file);
+            if (audioSource === 'upload' && file) {
+                const saved = await API.uploadAudio(file, selectedAudioName);
                 audioId = saved.id;
-                audioName = file.name;
+                audioName = saved.name || file.name; // Use backend name if available to be safe
+            } else if (audioSource === 'select' && selectedAudioId) {
+                audioId = selectedAudioId;
+                audioName = selectedAudioName;
             }
 
             await addItem(h, m, s, label, audioId, audioName);
@@ -40,6 +66,11 @@ export function AlarmForm() {
             setLabel('');
             setFile(null);
             if (fileInputRef.current) fileInputRef.current.value = '';
+            // Don't reset audioSource to keep user preference? Or reset to upload?
+            // Let's keep it as is, but maybe clear selection
+            setSelectedAudioId(null);
+            setSelectedAudioName('');
+
         } catch (e: any) {
             console.error('Operation failed', e);
             alert(`Failed: ${e.message}`);
@@ -113,28 +144,117 @@ export function AlarmForm() {
                 </div>
             </div>
 
-            {/* Audio File Input */}
+            {/* Audio Selection Section */}
             <div>
-                <label htmlFor="audio-file" className="block text-sm font-bold text-muted mb-2 uppercase tracking-wider">
-                    Audio File
+                <label className="block text-sm font-bold text-muted mb-3 uppercase tracking-wider">
+                    Audio Source
                 </label>
-                <div className="relative">
-                    <input
-                        id="audio-file"
-                        type="file"
-                        accept="audio/*"
-                        ref={fileInputRef}
-                        onChange={e => setFile(e.target.files?.[0] || null)}
-                        className="block w-full text-sm text-muted file:mr-4 file:py-2.5 file:px-4 file:rounded-lg file:border file:border-line file:text-sm file:font-semibold file:bg-bg-soft file:text-fg hover:file:bg-bg-soft/80 cursor-pointer transition-all"
-                        aria-label="Select audio file"
-                    />
-                    {file && (
-                        <div className="mt-2 text-xs text-muted/70 flex items-center gap-2">
-                            <span className="inline-block w-2 h-2 bg-primary rounded-full"></span>
-                            Selected: {file.name}
-                        </div>
-                    )}
+
+                <div className="bg-bg-soft/30 border border-line rounded-xl p-1 flex mb-4">
+                    <button
+                        type="button"
+                        onClick={() => setAudioSource('upload')}
+                        className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${audioSource === 'upload' ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-muted hover:text-fg'}`}
+                    >
+                        Upload New
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setAudioSource('select');
+                            loadAudioFiles();
+                        }}
+                        className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${audioSource === 'select' ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-muted hover:text-fg'}`}
+                    >
+                        Select Existing
+                    </button>
                 </div>
+
+                {audioSource === 'upload' ? (
+                    <div className="relative animate-in fade-in slide-in-from-bottom-2 duration-300">
+                        <input
+                            id="audio-file"
+                            type="file"
+                            accept="audio/*"
+                            ref={fileInputRef}
+                            onChange={e => {
+                                setFile(e.target.files?.[0] || null);
+                                setSelectedAudioId(null); // Clear selection if uploading
+                                // Pre-fill name from file
+                                if (e.target.files?.[0]) {
+                                    const name = e.target.files[0].name.replace(/\.[^/.]+$/, "");
+                                    setSelectedAudioName(name);
+                                }
+                            }}
+                            className="block w-full text-sm text-muted file:mr-4 file:py-2.5 file:px-4 file:rounded-lg file:border file:border-line file:text-sm file:font-semibold file:bg-bg-soft file:text-fg hover:file:bg-bg-soft/80 cursor-pointer transition-all"
+                            aria-label="Select audio file"
+                        />
+                        {file && (
+                            <div className="mt-4 space-y-2">
+                                <div className="text-xs text-muted/70 flex items-center gap-2">
+                                    <span className="inline-block w-2 h-2 bg-primary rounded-full"></span>
+                                    Selected: {file.name}
+                                </div>
+
+                                <div>
+                                    <label htmlFor="audio-name" className="block text-xs font-bold text-muted mb-1 uppercase tracking-wider">
+                                        Rename File <span className="text-muted/50 font-normal">(Optional, extension added automatically)</span>
+                                    </label>
+                                    <input
+                                        id="audio-name"
+                                        type="text"
+                                        value={selectedAudioName}
+                                        onChange={e => setSelectedAudioName(e.target.value)}
+                                        placeholder="e.g. MorningAlert"
+                                        className="w-full bg-bg-soft border border-line rounded-lg p-2 text-sm outline-none focus:border-primary transition-all"
+                                    />
+                                </div>
+                            </div>
+                        )}
+                        <p className="text-xs text-muted/50 mt-2 ml-1">
+                            New uploads will use their filename. If a file with the same name exists, it will be overwritten.
+                        </p>
+                    </div>
+                ) : (
+                    <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                        {isLoadingAudio ? (
+                            <div className="text-center py-4 text-muted text-sm">Loading audio files...</div>
+                        ) : audioFiles.length === 0 ? (
+                            <div className="text-center py-4 text-muted text-sm border border-dashed border-line rounded-lg">
+                                No audio files found.
+                            </div>
+                        ) : (
+                            <div className="border border-line rounded-lg max-h-48 overflow-y-auto bg-bg-soft/30 p-2 space-y-1 custom-scrollbar">
+                                {audioFiles.map(audio => (
+                                    <div
+                                        key={audio.id}
+                                        onClick={() => {
+                                            setSelectedAudioId(audio.id);
+                                            setFile(null); // Clear file if selecting
+                                            setSelectedAudioName(audio.name);
+                                        }}
+                                        className={`p-2 rounded-lg cursor-pointer text-sm flex items-center justify-between transition-colors ${selectedAudioId === audio.id ? 'bg-primary/20 text-primary border border-primary/30' : 'hover:bg-bg-soft text-muted hover:text-fg border border-transparent'}`}
+                                    >
+                                        <div className="flex items-center gap-2 truncate">
+                                            <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                                            </svg>
+                                            <span className="truncate">{audio.name}</span>
+                                        </div>
+                                        {selectedAudioId === audio.id && (
+                                            <svg className="w-4 h-4 text-primary flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                                            </svg>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        <div className="mt-2 text-right">
+                            <button type="button" onClick={loadAudioFiles} className="text-xs text-primary hover:text-primary/80 underline">Refresh List</button>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Label Input */}
