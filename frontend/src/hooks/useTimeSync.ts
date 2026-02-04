@@ -49,11 +49,11 @@ export function useTimeSync(): TimeSyncState {
 
             setOffset(calculatedOffset);
             console.log(`⏱️ Time sync successful. Offset: ${(calculatedOffset / 1000).toFixed(1)}s (${calculatedOffset > 0 ? 'local ahead' : 'local behind'})`);
-        } catch (err) {
-            const errorMsg = err instanceof Error ? err.message : 'Unknown error';
-            setError(errorMsg);
-            console.warn('⚠️ Time sync failed:', errorMsg);
-            // Keep using previous offset (or 0 if first sync)
+        } catch {
+            // If sync fails, just log it debug and use local time (offset 0)
+            console.debug('Time sync unavailable, using local device time.');
+            // We don't set 'error' state to avoid showing scary messages to the user
+            // since falling back to local time is the desired behavior for them.
         } finally {
             setIsSyncing(false);
         }
