@@ -62,7 +62,7 @@ router.post('/', upload.single('file'), async (req, res) => {
 
   if (error) {
     console.error('Supabase upload error:', error);
-    return res.status(500).json({ message: 'Failed to upload file' });
+    return res.status(500).json({ message: 'Failed to upload file', error: error });
   }
 
   // Get public URL
