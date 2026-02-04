@@ -24,7 +24,7 @@ router.get('/', async (req, res) => {
 
     return {
       id: file.name,
-      name: file.name,
+      name: decodeURIComponent(file.name), // Decode for display
       url: publicUrlData.publicUrl,
       size: file.metadata?.size,
       created_at: file.created_at
@@ -51,7 +51,8 @@ router.post('/', upload.single('file'), async (req, res) => {
 
   // Sanitize filename to avoid issues, allowing Thai characters (\u0E00-\u0E7F)
   const sanitized = rawName.replace(/[^a-zA-Z0-9.\-_\u0E00-\u0E7F]/g, '_');
-  const filePath = sanitized;
+  // Encode to ensure storage key validity (Supabase/S3 issue with Thai chars)
+  const filePath = encodeURIComponent(sanitized);
 
   const { data, error } = await supabase.storage
     .from('audio')
@@ -72,7 +73,7 @@ router.post('/', upload.single('file'), async (req, res) => {
 
   res.status(201).json({
     id: filePath,
-    name: filePath,
+    name: decodeURIComponent(filePath), // Return decoded for display
     url: publicUrlData.publicUrl
   });
 });
