@@ -49,8 +49,9 @@ router.post('/', upload.single('file'), async (req, res) => {
     rawName = `${rawName}.${fileExt}`;
   }
 
-  // Sanitize filename to avoid issues, allowing Thai characters (\u0E00-\u0E7F)
-  const sanitized = rawName.replace(/[^a-zA-Z0-9.\-_\u0E00-\u0E7F]/g, '_');
+  // Sanitize filename: Just trim whitespace. 
+  // We rely on encodeURIComponent to handle special chars safe for storage.
+  const sanitized = rawName.trim();
   // Encode to ensure storage key validity (Supabase/S3 issue with Thai chars)
   const filePath = encodeURIComponent(sanitized);
 
