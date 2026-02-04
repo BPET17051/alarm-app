@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: alarm-backend
+    env: node
+    region: singapore
+    plan: free
+    buildCommand: cd backend && npm install && npm run build
+    startCommand: cd backend && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: APP_PORT
+        value: 4000
+      - key: CORS_ORIGIN
+        value: https://alarm-app-omega.vercel.app
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
