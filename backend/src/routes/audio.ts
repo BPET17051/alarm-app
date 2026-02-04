@@ -49,8 +49,8 @@ router.post('/', upload.single('file'), async (req, res) => {
     rawName = `${rawName}.${fileExt}`;
   }
 
-  // Sanitize filename to avoid issues
-  const sanitized = rawName.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+  // Sanitize filename to avoid issues, allowing Thai characters (\u0E00-\u0E7F)
+  const sanitized = rawName.replace(/[^a-zA-Z0-9.\-_\u0E00-\u0E7F]/g, '_');
   const filePath = sanitized;
 
   const { data, error } = await supabase.storage
@@ -75,6 +75,21 @@ router.post('/', upload.single('file'), async (req, res) => {
     name: filePath,
     url: publicUrlData.publicUrl
   });
+});
+
+router.delete('/:name', async (req, res) => {
+  const { name } = req.params;
+
+  const { error } = await supabase.storage
+    .from('audio')
+    .remove([name]);
+
+  if (error) {
+    console.error('Supabase delete error:', error);
+    return res.status(500).json({ message: 'Failed to delete file' });
+  }
+
+  res.json({ message: 'File deleted successfully' });
 });
 
 router.get('/:id', async (req, res) => {

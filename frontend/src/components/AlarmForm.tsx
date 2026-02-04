@@ -36,6 +36,25 @@ export function AlarmForm() {
     // Better to load when the component mounts if we want it ready? 
     // Or just load when user clicks "Select Existing" (handled in the button click)
 
+    const handleDeleteAudio = async (e: React.MouseEvent, fileName: string) => {
+        e.stopPropagation();
+        if (!confirm(`Are you sure you want to delete "${fileName}"?`)) return;
+
+        try {
+            await API.deleteAudio(fileName);
+            // Refresh list
+            loadAudioFiles();
+            // Deselect if deleted
+            if (selectedAudioId === fileName) {
+                setSelectedAudioId(null);
+                setSelectedAudioName('');
+            }
+        } catch (error: unknown) {
+            console.error('Failed to delete audio', error);
+            alert('Failed to delete audio file');
+        }
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
@@ -234,19 +253,31 @@ export function AlarmForm() {
                                             setFile(null); // Clear file if selecting
                                             setSelectedAudioName(audio.name);
                                         }}
-                                        className={`p-2 rounded-lg cursor-pointer text-sm flex items-center justify-between transition-colors ${selectedAudioId === audio.id ? 'bg-primary/20 text-primary border border-primary/30' : 'hover:bg-bg-soft text-muted hover:text-fg border border-transparent'}`}
+                                        className={`p-2 rounded-lg cursor-pointer text-sm flex items-center justify-between group transition-colors ${selectedAudioId === audio.id ? 'bg-primary/20 text-primary border border-primary/30' : 'hover:bg-bg-soft text-muted hover:text-fg border border-transparent'}`}
                                     >
-                                        <div className="flex items-center gap-2 truncate">
+                                        <div className="flex items-center gap-2 truncate overflow-hidden flex-1">
                                             <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
                                             </svg>
                                             <span className="truncate">{audio.name}</span>
                                         </div>
-                                        {selectedAudioId === audio.id && (
-                                            <svg className="w-4 h-4 text-primary flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-                                            </svg>
-                                        )}
+                                        <div className="flex items-center gap-2">
+                                            {selectedAudioId === audio.id && (
+                                                <svg className="w-4 h-4 text-primary flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                                                </svg>
+                                            )}
+                                            <button
+                                                type="button"
+                                                onClick={(e) => handleDeleteAudio(e, audio.name)}
+                                                className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-500/20 text-muted hover:text-red-500 rounded transition-all"
+                                                title="Delete file"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                </svg>
+                                            </button>
+                                        </div>
                                     </div>
                                 ))}
                             </div>
