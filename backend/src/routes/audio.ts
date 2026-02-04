@@ -7,23 +7,40 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 // List available audio files
 router.get('/', async (req, res) => {
-  const { data, error } = await supabase.storage
+  // Get files from storage
+  const { data: storageFiles, error: storageError } = await supabase.storage
     .from('audio')
     .list();
 
-  if (error) {
-    console.error('Supabase list error:', error);
+  if (storageError) {
+    console.error('Supabase list error:', storageError);
     return res.status(500).json({ message: 'Failed to list audio files' });
   }
 
+  // Get metadata from database
+  const { data: dbFiles, error: dbError } = await supabase
+    .from('audio_files')
+    .select('*');
+
+  if (dbError) {
+    console.error('Database query error:', dbError);
+    // Continue without metadata if DB query fails
+  }
+
+  // Create a map of id -> metadata
+  const metadataMap = new Map(
+    (dbFiles || []).map(f => [f.id, f])
+  );
+
   // Map to simple objects
-  const files = data.map(file => {
+  const files = storageFiles.map(file => {
     const { data: publicUrlData } = supabase.storage
       .from('audio')
       .getPublicUrl(file.name);
 
-    // Try to get display name from metadata, fallback to filename
-    const displayName = file.metadata?.displayName || file.name;
+    // Get display name from database, fallback to filename
+    const metadata = metadataMap.get(file.name);
+    const displayName = metadata?.display_name || file.name;
 
     return {
       id: file.name,
@@ -67,13 +84,28 @@ router.post('/', upload.single('file'), async (req, res) => {
     .from('audio')
     .upload(filePath, file.buffer, {
       contentType: file.mimetype,
-      upsert: true,
-      metadata: metadata
+      upsert: true
     });
 
   if (error) {
     console.error('Supabase upload error:', error);
     return res.status(500).json({ message: 'Failed to upload file', error: error });
+  }
+
+  // Save metadata to database
+  const { error: dbError } = await supabase
+    .from('audio_files')
+    .upsert({
+      id: filePath,
+      display_name: displayName,
+      original_name: file.originalname,
+      file_size: file.size,
+      mime_type: file.mimetype
+    });
+
+  if (dbError) {
+    console.error('Database insert error:', dbError);
+    // Continue even if DB insert fails - file is already uploaded
   }
 
   // Get public URL
@@ -99,6 +131,17 @@ router.delete('/:name', async (req, res) => {
   if (error) {
     console.error('Supabase delete error:', error);
     return res.status(500).json({ message: 'Failed to delete file' });
+  }
+
+  // Also delete from database
+  const { error: dbError } = await supabase
+    .from('audio_files')
+    .delete()
+    .eq('id', name);
+
+  if (dbError) {
+    console.error('Database delete error:', dbError);
+    // Continue even if DB delete fails - file is already deleted from storage
   }
 
   res.json({ message: 'File deleted successfully' });
