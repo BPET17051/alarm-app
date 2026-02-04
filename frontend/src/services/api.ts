@@ -68,7 +68,23 @@ export async function uploadAudio(file: File, customName?: string): Promise<{ id
 
     if (!res.ok) {
         if (res.status === 401) throw new Error('Unauthorized');
-        throw new Error(`Failed to upload audio: ${res.status} ${res.statusText}`);
+
+        let errorMsg = `Failed to upload audio: ${res.status} ${res.statusText}`;
+        try {
+            const errorData = await res.json();
+            if (errorData.message) {
+                errorMsg = `Upload failed: ${errorData.message}`;
+            }
+            if (errorData.error && typeof errorData.error === 'object') {
+                errorMsg += ` (${JSON.stringify(errorData.error)})`;
+            } else if (errorData.error) {
+                errorMsg += ` (${errorData.error})`;
+            }
+        } catch (e) {
+            // Ignore json parse error, stick to default message
+        }
+
+        throw new Error(errorMsg);
     }
     return res.json();
 }
