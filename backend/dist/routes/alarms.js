@@ -4,75 +4,105 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const node_crypto_1 = __importDefault(require("node:crypto"));
 const db_1 = __importDefault(require("../db"));
 const router = (0, express_1.Router)();
-router.get('/', (req, res) => {
-    const alarms = db_1.default.prepare('SELECT * FROM alarms ORDER BY h ASC, m ASC').all();
-    res.json(alarms);
+router.get('/', async (req, res) => {
+    const { data, error } = await db_1.default
+        .from('alarms')
+        .select('*')
+        .order('h', { ascending: true })
+        .order('m', { ascending: true })
+        .order('s', { ascending: true });
+    if (error)
+        return res.status(500).json({ message: error.message });
+    const mapped = data.map(a => ({
+        ...a,
+        s: a.s || 0,
+        audioId: a.audio_id,
+        audioName: a.audio_name,
+        audio_id: undefined,
+        audio_name: undefined
+    }));
+    res.json(mapped);
 });
-router.post('/', (req, res) => {
-    const { h, m, label, audio_id, audio_name } = req.body;
+router.post('/', async (req, res) => {
+    const { h, m, s, label, audioId, audioName } = req.body;
     if (h === undefined || m === undefined) {
         return res.status(400).json({ message: 'Missing time (h, m)' });
     }
-    const id = node_crypto_1.default.randomUUID();
+    const sec = s || 0;
     const now = new Date().toISOString();
-    db_1.default.prepare(`
-    INSERT INTO alarms (id, h, m, label, audio_id, audio_name, notify_status, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, 'PENDING', ?, ?)
-  `).run(id, h, m, label || '', audio_id || null, audio_name || '', now, now);
-    res.status(201).json({ id, h, m, label, audio_id, audio_name, notify_status: 'PENDING', created_at: now, updated_at: now });
+    const { data, error } = await db_1.default
+        .from('alarms')
+        .insert({
+        h, m, s: sec,
+        label: label || '',
+        audio_id: audioId || null,
+        audio_name: audioName || '',
+        notify_status: 'PENDING',
+        created_at: now,
+        updated_at: now
+    })
+        .select()
+        .single();
+    if (error)
+        return res.status(500).json({ message: error.message });
+    res.status(201).json({
+        ...data,
+        s: data.s || 0,
+        audioId: data.audio_id,
+        audioName: data.audio_name,
+        audio_id: undefined,
+        audio_name: undefined
+    });
 });
-router.put('/:id', (req, res) => {
+router.put('/:id', async (req, res) => {
     const { id } = req.params;
-    const { h, m, label, audio_id, audio_name, notify_status } = req.body;
+    const { h, m, s, label, audioId, audioName, notify_status } = req.body;
     const now = new Date().toISOString();
-    const current = db_1.default.prepare('SELECT * FROM alarms WHERE id = ?').get(id);
-    if (!current)
-        return res.status(404).json({ message: 'Alarm not found' });
-    const updates = [];
-    const values = [];
-    if (h !== undefined) {
-        updates.push('h = ?');
-        values.push(h);
-    }
-    if (m !== undefined) {
-        updates.push('m = ?');
-        values.push(m);
-    }
-    if (label !== undefined) {
-        updates.push('label = ?');
-        values.push(label);
-    }
-    if (audio_id !== undefined) {
-        updates.push('audio_id = ?');
-        values.push(audio_id);
-    }
-    if (audio_name !== undefined) {
-        updates.push('audio_name = ?');
-        values.push(audio_name);
-    }
-    if (notify_status !== undefined) {
-        updates.push('notify_status = ?');
-        values.push(notify_status);
-    }
-    updates.push('updated_at = ?');
-    values.push(now);
-    values.push(id);
-    db_1.default.prepare(`UPDATE alarms SET ${updates.join(', ')} WHERE id = ?`).run(...values);
-    const updated = db_1.default.prepare('SELECT * FROM alarms WHERE id = ?').get(id);
-    res.json(updated);
+    const updates = { updated_at: now };
+    if (h !== undefined)
+        updates.h = h;
+    if (m !== undefined)
+        updates.m = m;
+    if (s !== undefined)
+        updates.s = s;
+    if (label !== undefined)
+        updates.label = label;
+    if (audioId !== undefined)
+        updates.audio_id = audioId;
+    if (audioName !== undefined)
+        updates.audio_name = audioName;
+    if (notify_status !== undefined)
+        updates.notify_status = notify_status;
+    const { data, error } = await db_1.default
+        .from('alarms')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+    if (error)
+        return res.status(500).json({ message: error.message });
+    res.json({
+        ...data,
+        s: data.s || 0,
+        audioId: data.audio_id,
+        audioName: data.audio_name,
+        audio_id: undefined,
+        audio_name: undefined
+    });
 });
-router.delete('/:id', (req, res) => {
+router.delete('/:id', async (req, res) => {
     const { id } = req.params;
-    const result = db_1.default.prepare('DELETE FROM alarms WHERE id = ?').run(id);
-    if (result.changes === 0)
-        return res.status(404).json({ message: 'Alarm not found' });
+    const { error } = await db_1.default.from('alarms').delete().eq('id', id);
+    if (error)
+        return res.status(500).json({ message: error.message });
     res.status(204).send();
 });
-router.delete('/', (req, res) => {
-    db_1.default.prepare('DELETE FROM alarms').run();
+router.delete('/', async (req, res) => {
+    const { error } = await db_1.default.from('alarms').delete().neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
+    if (error)
+        return res.status(500).json({ message: error.message });
     res.status(204).send();
 });
 exports.default = router;

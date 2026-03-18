@@ -1,4 +1,3 @@
-import Database from 'better-sqlite3';
-declare const db: Database.Database;
-export default db;
+declare const supabase: import("@supabase/supabase-js").SupabaseClient<any, "public", "public", any, any>;
+export default supabase;
 //# sourceMappingURL=db.d.ts.map

@@ -4,85 +4,69 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const zod_1 = require("zod");
-const node_crypto_1 = __importDefault(require("node:crypto"));
 const db_1 = __importDefault(require("../db"));
-const auth_1 = require("../middleware/auth");
-const templateSchema = zod_1.z.object({
-    course: zod_1.z.string().min(1),
-    name: zod_1.z.string().min(1),
-    description: zod_1.z.string().optional(),
-    items: zod_1.z
-        .array(zod_1.z.object({
-        time: zod_1.z.string().regex(/^\d{2}:\d{2}$/),
-        label: zod_1.z.string().optional(),
-        audioId: zod_1.z.string().optional()
-    }))
-        .nonempty('Must include at least one schedule item')
-});
 const router = (0, express_1.Router)();
-router.get('/', (req, res) => {
-    const { course } = req.query;
-    const stmt = course
-        ? db_1.default.prepare('SELECT * FROM templates WHERE course = ? ORDER BY updated_at DESC')
-        : db_1.default.prepare('SELECT * FROM templates ORDER BY updated_at DESC');
-    const rows = (course ? stmt.all(course) : stmt.all());
-    const templates = rows.map(row => ({
-        id: row.id,
-        course: row.course,
-        name: row.name,
-        description: row.description,
-        items: JSON.parse(row.items_json),
-        audioRefs: row.audio_refs_json ? JSON.parse(row.audio_refs_json) : [],
-        updatedAt: row.updated_at
+// GET /api/templates - List all templates
+router.get('/', async (req, res) => {
+    const { data, error } = await db_1.default
+        .from('templates')
+        .select('*')
+        .order('created_at', { ascending: false });
+    if (error)
+        return res.status(500).json({ message: error.message });
+    const templates = data.map(t => ({
+        name: t.name,
+        items: t.items_json
     }));
     res.json({ templates });
 });
-router.get('/:id', (req, res) => {
-    const row = db_1.default.prepare('SELECT * FROM templates WHERE id = ?').get(req.params.id);
-    if (!row)
-        return res.status(404).json({ message: 'Template not found' });
-    res.json({
-        id: row.id,
-        course: row.course,
-        name: row.name,
-        description: row.description,
-        items: JSON.parse(row.items_json),
-        audioRefs: row.audio_refs_json ? JSON.parse(row.audio_refs_json) : [],
-        updatedAt: row.updated_at,
-        updatedBy: row.updated_by
-    });
-});
-router.post('/', auth_1.requireAuth, (req, res) => {
-    const result = templateSchema.safeParse(req.body);
-    if (!result.success) {
-        return res.status(400).json({ message: 'Invalid payload', issues: result.error.flatten() });
+// POST /api/templates - Create a template
+router.post('/', async (req, res) => {
+    const { name, items } = req.body;
+    if (!name || !items) {
+        return res.status(400).json({ message: 'Missing name or items' });
     }
-    const id = node_crypto_1.default.randomUUID();
-    const now = new Date().toISOString();
-    const user = (0, auth_1.getUser)(req);
-    db_1.default.prepare(`INSERT INTO templates (id, course, name, description, items_json, audio_refs_json, created_at, updated_at, updated_by)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, result.data.course, result.data.name, result.data.description || null, JSON.stringify(result.data.items), JSON.stringify(result.data.items.map(it => it.audioId).filter(Boolean)), now, now, user?.username || null);
-    res.status(201).json({ id });
-});
-router.put('/:id', auth_1.requireAuth, (req, res) => {
-    const result = templateSchema.safeParse(req.body);
-    if (!result.success) {
-        return res.status(400).json({ message: 'Invalid payload', issues: result.error.flatten() });
+    // Check if template with same name exists (simple deduplication)
+    const { data: existing } = await db_1.default
+        .from('templates')
+        .select('id')
+        .eq('name', name)
+        .single();
+    if (existing) {
+        // Update existing
+        const { error } = await db_1.default
+            .from('templates')
+            .update({
+            items_json: items,
+            created_at: new Date().toISOString() // Touch timestamp
+        })
+            .eq('id', existing.id);
+        if (error)
+            return res.status(500).json({ message: error.message });
     }
-    const existing = db_1.default.prepare('SELECT id FROM templates WHERE id = ?').get(req.params.id);
-    if (!existing)
-        return res.status(404).json({ message: 'Template not found' });
-    const now = new Date().toISOString();
-    const user = (0, auth_1.getUser)(req);
-    db_1.default.prepare(`UPDATE templates SET course=?, name=?, description=?, items_json=?, audio_refs_json=?, updated_at=?, updated_by=? WHERE id=?`).run(result.data.course, result.data.name, result.data.description || null, JSON.stringify(result.data.items), JSON.stringify(result.data.items.map(it => it.audioId).filter(Boolean)), now, user?.username || null, req.params.id);
-    res.json({ id: req.params.id });
+    else {
+        // Insert new
+        const { error } = await db_1.default
+            .from('templates')
+            .insert({
+            name,
+            items_json: items
+        });
+        if (error)
+            return res.status(500).json({ message: error.message });
+    }
+    res.status(201).json({ ok: true });
 });
-router.delete('/:id', auth_1.requireAuth, (req, res) => {
-    const info = db_1.default.prepare('DELETE FROM templates WHERE id = ?').run(req.params.id);
-    if (info.changes === 0)
-        return res.status(404).json({ message: 'Template not found' });
-    res.json({ ok: true });
+// DELETE /api/templates/:name - Delete a template
+router.delete('/:name', async (req, res) => {
+    const { name } = req.params;
+    const { error } = await db_1.default
+        .from('templates')
+        .delete()
+        .eq('name', name);
+    if (error)
+        return res.status(500).json({ message: error.message });
+    res.status(204).send();
 });
 exports.default = router;
 //# sourceMappingURL=templates.js.map

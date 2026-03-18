@@ -9,13 +9,18 @@ const db_1 = __importDefault(require("../db"));
 const auth_1 = require("../middleware/auth");
 const config_1 = require("../config");
 const router = (0, express_1.Router)();
-router.post('/login', (req, res) => {
+router.post('/login', async (req, res) => {
     const { username, password } = req.body;
     if (!username || !password) {
         return res.status(400).json({ message: 'username and password are required' });
     }
-    const user = db_1.default.prepare('SELECT * FROM users WHERE username = ?').get(username);
-    if (!user)
+    // Supabase query
+    const { data: user, error } = await db_1.default
+        .from('users')
+        .select('*')
+        .eq('username', username)
+        .single();
+    if (error || !user)
         return res.status(401).json({ message: 'Invalid credentials' });
     const ok = bcryptjs_1.default.compareSync(password, user.password_hash);
     if (!ok)

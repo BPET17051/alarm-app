@@ -5,50 +5,134 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const multer_1 = __importDefault(require("multer"));
-const node_path_1 = __importDefault(require("node:path"));
-const node_fs_1 = __importDefault(require("node:fs"));
-const node_crypto_1 = __importDefault(require("node:crypto"));
 const db_1 = __importDefault(require("../db"));
-const config_1 = require("../config");
-const auth_1 = require("../middleware/auth");
-const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
-const storage = multer_1.default.diskStorage({
-    destination: (_req, _file, cb) => cb(null, config_1.AUDIO_DIR),
-    filename: (_req, file, cb) => {
-        const id = node_crypto_1.default.randomUUID();
-        const ext = node_path_1.default.extname(file.originalname || '');
-        cb(null, `${id}${ext}`);
-    }
-});
-const upload = (0, multer_1.default)({
-    storage,
-    limits: { fileSize: MAX_SIZE_BYTES },
-    fileFilter: (_req, file, cb) => {
-        if (file.mimetype.startsWith('audio/'))
-            cb(null, true);
-        else
-            cb(new Error('Only audio files are allowed'));
-    }
-});
 const router = (0, express_1.Router)();
-router.post('/', upload.single('file'), (req, res) => {
-    if (!req.file)
-        return res.status(400).json({ message: 'Missing audio file' });
-    const id = node_path_1.default.parse(req.file.filename).name;
-    const user = (0, auth_1.getUser)(req);
-    db_1.default.prepare(`INSERT INTO audio_files (id, file_name, mime, size, stored_path, created_at, created_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`).run(id, req.file.originalname, req.file.mimetype, req.file.size, req.file.path, new Date().toISOString(), user?.username || null);
-    res.status(201).json({ id, url: `/audio/${id}` });
+const upload = (0, multer_1.default)({ storage: multer_1.default.memoryStorage() });
+// List available audio files
+router.get('/', async (req, res) => {
+    // Get files from storage
+    const { data: storageFiles, error: storageError } = await db_1.default.storage
+        .from('audio')
+        .list();
+    if (storageError) {
+        console.error('Supabase list error:', storageError);
+        return res.status(500).json({ message: 'Failed to list audio files' });
+    }
+    // Get metadata from database
+    const { data: dbFiles, error: dbError } = await db_1.default
+        .from('audio_files')
+        .select('*');
+    if (dbError) {
+        console.error('Database query error:', dbError);
+        // Continue without metadata if DB query fails
+    }
+    // Create a map of id -> metadata
+    const metadataMap = new Map((dbFiles || []).map(f => [f.id, f]));
+    // Map to simple objects
+    const files = storageFiles.map(file => {
+        const { data: publicUrlData } = db_1.default.storage
+            .from('audio')
+            .getPublicUrl(file.name);
+        // Get display name from database, fallback to filename
+        const metadata = metadataMap.get(file.name);
+        const displayName = metadata?.display_name || file.name;
+        return {
+            id: file.name,
+            name: displayName,
+            url: publicUrlData.publicUrl,
+            size: file.metadata?.size,
+            created_at: file.created_at
+        };
+    });
+    res.json(files);
 });
-router.get('/:id', (req, res) => {
-    const row = db_1.default.prepare('SELECT * FROM audio_files WHERE id = ?').get(req.params.id);
-    if (!row)
+router.post('/', upload.single('file'), async (req, res) => {
+    if (!req.file) {
+        return res.status(400).json({ message: 'No file uploaded' });
+    }
+    const file = req.file;
+    const fileExt = file.originalname.split('.').pop();
+    // Use custom name if provided, otherwise original name
+    let displayName = req.body.customName || file.originalname;
+    // Ensure extension is preserved or added
+    if (!displayName.toLowerCase().endsWith(`.${fileExt?.toLowerCase()}`)) {
+        displayName = `${displayName}.${fileExt}`;
+    }
+    // Generate a safe ASCII filename for storage (timestamp-based)
+    // This avoids Supabase storage key issues with Thai/special characters
+    const timestamp = Date.now();
+    const safeExt = fileExt?.replace(/[^a-zA-Z0-9]/g, '') || 'mp3';
+    const filePath = `${timestamp}.${safeExt}`;
+    // Store the display name in metadata so we can retrieve it later
+    const metadata = {
+        displayName: displayName
+    };
+    const { data, error } = await db_1.default.storage
+        .from('audio')
+        .upload(filePath, file.buffer, {
+        contentType: file.mimetype,
+        upsert: true
+    });
+    if (error) {
+        console.error('Supabase upload error:', error);
+        return res.status(500).json({ message: 'Failed to upload file', error: error });
+    }
+    // Save metadata to database
+    const { error: dbError } = await db_1.default
+        .from('audio_files')
+        .upsert({
+        id: filePath,
+        display_name: displayName,
+        original_name: file.originalname,
+        file_size: file.size,
+        mime_type: file.mimetype
+    });
+    if (dbError) {
+        console.error('Database insert error:', dbError);
+        // Continue even if DB insert fails - file is already uploaded
+    }
+    // Get public URL
+    const { data: publicUrlData } = db_1.default.storage
+        .from('audio')
+        .getPublicUrl(filePath);
+    res.status(201).json({
+        id: filePath,
+        name: displayName, // Return the original display name
+        url: publicUrlData.publicUrl
+    });
+});
+router.delete('/:name', async (req, res) => {
+    const { name } = req.params;
+    console.log(`🗑️ Deleting audio file: "${name}"`); // Debug log
+    const { error } = await db_1.default.storage
+        .from('audio')
+        .remove([name]);
+    if (error) {
+        console.error('Supabase delete error:', error);
+        return res.status(500).json({ message: 'Failed to delete file' });
+    }
+    // Also delete from database
+    const { error: dbError } = await db_1.default
+        .from('audio_files')
+        .delete()
+        .eq('id', name);
+    if (dbError) {
+        console.error('Database delete error:', dbError);
+        // Continue even if DB delete fails - file is already deleted from storage
+    }
+    res.json({ message: 'File deleted successfully' });
+});
+router.get('/:id', async (req, res) => {
+    const { id } = req.params;
+    // For Supabase, the ID is the path, so we can just generate the URL
+    const { data } = db_1.default.storage
+        .from('audio')
+        .getPublicUrl(id);
+    if (!data.publicUrl) {
         return res.status(404).json({ message: 'Audio not found' });
-    if (!node_fs_1.default.existsSync(row.stored_path))
-        return res.status(410).json({ message: 'Audio missing on disk' });
-    res.setHeader('Content-Type', row.mime);
-    const stream = node_fs_1.default.createReadStream(row.stored_path);
-    stream.pipe(res);
+    }
+    // Redirect to the public URL
+    res.redirect(data.publicUrl);
 });
 exports.default = router;
 //# sourceMappingURL=audio.js.map

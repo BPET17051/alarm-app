@@ -8,4 +8,6 @@ export declare const AUDIO_DIR: string;
 export declare const DB_PATH: string;
 export declare const TOKEN_TTL_MS: number;
 export declare const CORS_ORIGIN: string;
+export declare const SUPABASE_URL: string;
+export declare const SUPABASE_KEY: string;
 //# sourceMappingURL=config.d.ts.map

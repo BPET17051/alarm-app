@@ -80,7 +80,7 @@ export async function uploadAudio(file: File, customName?: string): Promise<{ id
             } else if (errorData.error) {
                 errorMsg += ` (${errorData.error})`;
             }
-        } catch (e) {
+        } catch {
             // Ignore json parse error, stick to default message
         }
 

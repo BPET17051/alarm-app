@@ -10,9 +10,16 @@ interface AudioSelectionModalProps {
     onClose: () => void;
     onConfirm: (selection: AudioSelection) => void;
     currentSelection?: AudioSelection | null;
+    allowUpload?: boolean;
 }
 
-export function AudioSelectionModal({ isOpen, onClose, onConfirm, currentSelection }: AudioSelectionModalProps) {
+export function AudioSelectionModal({
+    isOpen,
+    onClose,
+    onConfirm,
+    currentSelection,
+    allowUpload = true
+}: AudioSelectionModalProps) {
     const [activeTab, setActiveTab] = useState<'upload' | 'select'>('select');
     const [audioFiles, setAudioFiles] = useState<{ id: string; name: string; url: string }[]>([]);
     const [isLoadingAudio, setIsLoadingAudio] = useState(false);
@@ -28,7 +35,7 @@ export function AudioSelectionModal({ isOpen, onClose, onConfirm, currentSelecti
     // Initialize state from props when opening
     useEffect(() => {
         if (isOpen) {
-            if (currentSelection?.source === 'upload') {
+            if (allowUpload && currentSelection?.source === 'upload') {
                 setActiveTab('upload');
                 setUploadFile(currentSelection.file);
                 setUploadName(currentSelection.name);
@@ -37,13 +44,17 @@ export function AudioSelectionModal({ isOpen, onClose, onConfirm, currentSelecti
                 setSelectedId(currentSelection.id);
                 setSelectedName(currentSelection.name);
             } else {
-                // Default to select tab if nothing selected, or keep previous logic?
-                // Let's default to 'select'
                 setActiveTab('select');
             }
             loadAudioFiles();
         }
-    }, [isOpen, currentSelection]);
+    }, [isOpen, currentSelection, allowUpload]);
+
+    useEffect(() => {
+        if (!allowUpload && activeTab === 'upload') {
+            setActiveTab('select');
+        }
+    }, [allowUpload, activeTab]);
 
     const loadAudioFiles = async () => {
         setIsLoadingAudio(true);
@@ -122,18 +133,20 @@ export function AudioSelectionModal({ isOpen, onClose, onConfirm, currentSelecti
                     >
                         Select Existing
                     </button>
-                    <button
-                        type="button"
-                        onClick={() => setActiveTab('upload')}
-                        className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${activeTab === 'upload' ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-muted hover:text-fg'}`}
-                    >
-                        Upload New
-                    </button>
+                    {allowUpload && (
+                        <button
+                            type="button"
+                            onClick={() => setActiveTab('upload')}
+                            className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${activeTab === 'upload' ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-muted hover:text-fg'}`}
+                        >
+                            Upload New
+                        </button>
+                    )}
                 </div>
 
                 {/* Content */}
                 <div className="min-h-[200px]">
-                    {activeTab === 'select' ? (
+                    {activeTab === 'select' || !allowUpload ? (
                         <div className="space-y-4">
                             {isLoadingAudio ? (
                                 <div className="text-center py-8 text-muted text-sm">Loading audio files...</div>
