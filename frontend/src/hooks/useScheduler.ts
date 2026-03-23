@@ -7,9 +7,14 @@ export function useScheduler(
     playedIds: Set<string>,
     markPlayed: (id: string, status: 'SENT' | 'FAILED') => void,
     isAudioEnabled: boolean,
-    serverTime?: Date  // Optional synced server time
+    dayKey: string,
+    serverTime?: Date
 ) {
     const triggeredAlarms = useRef<Set<string>>(new Set());
+
+    useEffect(() => {
+        triggeredAlarms.current.clear();
+    }, [dayKey]);
 
     useEffect(() => {
         const check = () => {

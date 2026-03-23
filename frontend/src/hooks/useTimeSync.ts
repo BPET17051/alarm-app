@@ -11,7 +11,7 @@ interface TimeSyncState {
     error: string | null;
 }
 
-const SYNC_INTERVAL = 5 * 60 * 1000; // Re-sync every 5 minutes
+const SYNC_INTERVAL = 30 * 1000; // Re-sync every 30 seconds
 const TIME_API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:4000/api') + '/time';
 
 export function useTimeSync(): TimeSyncState {
@@ -21,15 +21,20 @@ export function useTimeSync(): TimeSyncState {
     const [currentTime, setCurrentTime] = useState(new Date());
     const syncIntervalRef = useRef<number | undefined>(undefined);
     const clockIntervalRef = useRef<number | undefined>(undefined);
+    const isSyncingRef = useRef(false);
 
-    // Function to sync time with server
     const syncTime = async () => {
+        if (isSyncingRef.current) {
+            return;
+        }
+
+        isSyncingRef.current = true;
         setIsSyncing(true);
         setError(null);
 
         try {
             const startTime = Date.now();
-            const response = await fetch(TIME_API_URL);
+            const response = await fetch(TIME_API_URL, { cache: 'no-store' });
 
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}`);
@@ -48,34 +53,53 @@ export function useTimeSync(): TimeSyncState {
             const calculatedOffset = localTime - adjustedServerTime;
 
             setOffset(calculatedOffset);
-            console.log(`⏱️ Time sync successful. Offset: ${(calculatedOffset / 1000).toFixed(1)}s (${calculatedOffset > 0 ? 'local ahead' : 'local behind'})`);
+            console.log(`Time sync successful. Offset: ${(calculatedOffset / 1000).toFixed(1)}s (${calculatedOffset > 0 ? 'local ahead' : 'local behind'})`);
         } catch {
             // If sync fails, just log it debug and use local time (offset 0)
             console.debug('Time sync unavailable, using local device time.');
             // We don't set 'error' state to avoid showing scary messages to the user
             // since falling back to local time is the desired behavior for them.
         } finally {
+            isSyncingRef.current = false;
             setIsSyncing(false);
         }
     };
 
-    // Initial sync on mount
     useEffect(() => {
         syncTime();
 
-        // Re-sync periodically
         syncIntervalRef.current = window.setInterval(() => {
             syncTime();
         }, SYNC_INTERVAL);
+
+        const handleVisibilitySync = () => {
+            if (document.visibilityState === 'visible') {
+                syncTime();
+            }
+        };
+
+        const handleFocusSync = () => {
+            syncTime();
+        };
+
+        const handleOnlineSync = () => {
+            syncTime();
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilitySync);
+        window.addEventListener('focus', handleFocusSync);
+        window.addEventListener('online', handleOnlineSync);
 
         return () => {
             if (syncIntervalRef.current) {
                 clearInterval(syncIntervalRef.current);
             }
+            document.removeEventListener('visibilitychange', handleVisibilitySync);
+            window.removeEventListener('focus', handleFocusSync);
+            window.removeEventListener('online', handleOnlineSync);
         };
     }, []);
 
-    // Update clock every second
     useEffect(() => {
         clockIntervalRef.current = window.setInterval(() => {
             setCurrentTime(new Date());
@@ -88,7 +112,6 @@ export function useTimeSync(): TimeSyncState {
         };
     }, []);
 
-    // Calculate server time by subtracting offset from local time
     const serverTime = new Date(currentTime.getTime() - offset);
 
     return {

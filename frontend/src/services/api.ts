@@ -51,16 +51,6 @@ export async function uploadAudio(file: File, customName?: string): Promise<{ id
         formData.append('customName', customName);
     }
 
-    // Note: The backend requires authentication for uploads.
-    // For this phase, we assume the backend might need to be relaxed or we need to implement auth.
-    // However, looking at the backend code, `requireAuth` is used.
-    // We might need to implement login or temporarily disable auth for testing.
-    // For now, let's assume we need to handle auth later or the user is logged in.
-    // But wait, the user hasn't implemented login in the frontend yet.
-    // I should check if I can disable auth for audio upload or if I should implement a dummy login.
-    // The README says "POST /api/auth/login – login with admin credentials".
-    // I'll add a TODO to handle auth. For now, I'll try to upload.
-
     const res = await fetch(`${API_URL}/audio`, {
         method: 'POST',
         body: formData,

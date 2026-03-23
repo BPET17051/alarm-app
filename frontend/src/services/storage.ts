@@ -1,4 +1,5 @@
 import type { AlarmItem, Template } from '../types';
+import { formatDayKey } from '../utils/date';
 
 const NS = 'schd:v1';
 const STORE_ITEMS = `${NS}:items`;
@@ -51,4 +52,8 @@ export function loadPlayed(): { date: string; ids: string[] } {
 
 export function savePlayed(date: string, ids: string[]) {
     localStorage.setItem(STORE_PLAYED, JSON.stringify({ date, ids }));
+}
+
+export function getTodayKey() {
+    return formatDayKey(new Date());
 }

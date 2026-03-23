@@ -1,13 +1,15 @@
-import { useTimeSync } from '../hooks/useTimeSync';
+interface ClockProps {
+    serverTime: Date;
+    offset: number;
+    isSyncing: boolean;
+    error: string | null;
+}
 
-export function Clock() {
-    const { serverTime, offset, isSyncing, error } = useTimeSync();
-
+export function Clock({ serverTime, offset, isSyncing, error }: ClockProps) {
     const h = serverTime.getHours().toString().padStart(2, '0');
     const m = serverTime.getMinutes().toString().padStart(2, '0');
     const s = serverTime.getSeconds().toString().padStart(2, '0');
 
-    // Determine status message and color
     const offsetMinutes = Math.abs(Math.round(offset / 1000 / 60));
     const offsetSign = offset > 0 ? '+' : '-';
 
@@ -18,13 +20,13 @@ export function Clock() {
         statusText = 'Sync failed, using local time';
         statusColor = 'text-red-400';
     } else if (isSyncing && offset === 0) {
-        statusText = 'Syncing with Thailand time...';
+        statusText = 'Syncing clock...';
         statusColor = 'text-yellow-400';
     } else if (offsetMinutes > 0) {
         statusText = `Using local time | Offset: ${offsetSign}${offsetMinutes}m`;
         statusColor = 'text-amber-400';
     } else {
-        statusText = 'Synced with Thailand time ✓';
+        statusText = 'Clock synced';
         statusColor = 'text-green-400';
     }
 

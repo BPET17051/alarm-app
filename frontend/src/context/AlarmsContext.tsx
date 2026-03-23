@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback, type React
 import type { AlarmItem, Template } from '../types';
 import * as API from '../services/api';
 import * as Storage from '../services/storage';
+import { playTestAnnouncement, unlockBrowserAudio, type AudioTestLanguage, type AudioTestResult } from '../services/audioTest';
 
 interface AlarmsContextType {
     items: AlarmItem[];
@@ -9,6 +10,7 @@ interface AlarmsContextType {
     setJobName: (name: string) => void;
     templates: Template[];
     playedIds: Set<string>;
+    syncPlaybackDay: (dayKey: string) => void;
     addItem: (h: number, m: number, s: number, label: string, audioId: string | null, audioName: string) => Promise<void>;
     updateItem: (id: string, updates: Partial<AlarmItem>) => Promise<void>;
     removeItem: (id: string) => Promise<void>;
@@ -20,8 +22,7 @@ interface AlarmsContextType {
     loadTemplate: (name: string) => Promise<void>;
     deleteTemplate: (name: string) => void;
     isAudioEnabled: boolean;
-    enableAudio: () => Promise<void>;
-    disableAudio: () => void;
+    testAudio: (language: AudioTestLanguage) => Promise<AudioTestResult>;
 }
 
 const AlarmsContext = createContext<AlarmsContextType | undefined>(undefined);
@@ -30,10 +31,14 @@ export function AlarmsProvider({ children }: { children: ReactNode }) {
     const [items, setItems] = useState<AlarmItem[]>([]);
     const [jobName, setJobName] = useState(() => Storage.loadJobName());
     const [templates, setTemplates] = useState<Template[]>([]);
+    const [playedDay, setPlayedDay] = useState(() => {
+        const played = Storage.loadPlayed();
+        return played.date || Storage.getTodayKey();
+    });
 
     const [playedIds, setPlayedIds] = useState<Set<string>>(() => {
         const played = Storage.loadPlayed();
-        const today = new Date().toISOString().split('T')[0];
+        const today = Storage.getTodayKey();
         if (played.date !== today) {
             Storage.savePlayed(today, []);
             return new Set();
@@ -73,9 +78,16 @@ export function AlarmsProvider({ children }: { children: ReactNode }) {
     }, [templates]);
 
     useEffect(() => {
-        const today = new Date().toISOString().split('T')[0];
-        Storage.savePlayed(today, Array.from(playedIds));
-    }, [playedIds]);
+        Storage.savePlayed(playedDay, Array.from(playedIds));
+    }, [playedDay, playedIds]);
+
+    const syncPlaybackDay = useCallback((dayKey: string) => {
+        setPlayedDay(currentDay => {
+            if (currentDay === dayKey) return currentDay;
+            setPlayedIds(new Set());
+            return dayKey;
+        });
+    }, []);
 
     // Actions
     const addItem = useCallback(async (h: number, m: number, s: number, label: string, audioId: string | null, audioName: string) => {
@@ -203,33 +215,16 @@ export function AlarmsProvider({ children }: { children: ReactNode }) {
         }
     }, []);
 
-    const enableAudio = useCallback(async () => {
+    const testAudio = useCallback(async (language: AudioTestLanguage) => {
         try {
-            const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-            if (!AudioContextClass) {
-                console.warn('AudioContext not supported');
-                setIsAudioEnabled(true);
-                return;
-            }
-            const ctx = new AudioContextClass();
-            if (ctx.state === 'suspended') {
-                await ctx.resume();
-            }
-            // Play a silent buffer to unlock audio
-            const buffer = ctx.createBuffer(1, 1, 22050);
-            const source = ctx.createBufferSource();
-            source.buffer = buffer;
-            source.connect(ctx.destination);
-            source.start(0);
-
+            await unlockBrowserAudio();
+            const result = await playTestAnnouncement(language);
             setIsAudioEnabled(true);
+            return result;
         } catch (e: unknown) {
-            console.error('Failed to enable audio', e);
+            console.error('Failed to test audio', e);
+            throw e;
         }
-    }, []);
-
-    const disableAudio = useCallback(() => {
-        setIsAudioEnabled(false);
     }, []);
 
     const value = {
@@ -238,6 +233,7 @@ export function AlarmsProvider({ children }: { children: ReactNode }) {
         setJobName,
         templates,
         playedIds,
+        syncPlaybackDay,
         addItem,
         updateItem,
         removeItem,
@@ -250,8 +246,7 @@ export function AlarmsProvider({ children }: { children: ReactNode }) {
 
         deleteTemplate,
         isAudioEnabled,
-        enableAudio,
-        disableAudio
+        testAudio
     };
 
     return (

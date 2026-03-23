@@ -20,13 +20,12 @@ export function Controls({ selected }: ControlsProps) {
     return (
         <div className="mt-6 pt-6 border-t border-line/50">
             <div className="flex flex-wrap gap-3">
-                {/* Bulk Actions Group */}
                 <div className="flex gap-2 flex-wrap">
                     <button
                         onClick={() => setShowShift(true)}
                         disabled={selected.size === 0}
                         className="px-4 py-2.5 rounded-lg border border-line hover:bg-white/5 hover:border-primary/50 transition-all text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
-                        title={selected.size === 0 ? "Select alarms to shift" : `Shift ${selected.size} alarm(s)`}
+                        title={selected.size === 0 ? 'Select alarms to shift' : `Shift ${selected.size} alarm(s)`}
                         aria-label="Shift selected alarms"
                     >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -38,7 +37,7 @@ export function Controls({ selected }: ControlsProps) {
                         onClick={() => setShowEqualize(true)}
                         disabled={selected.size < 2}
                         className="px-4 py-2.5 rounded-lg border border-line hover:bg-white/5 hover:border-primary/50 transition-all text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
-                        title={selected.size < 2 ? "Select 2+ alarms to equalize" : `Equalize ${selected.size} alarm(s)`}
+                        title={selected.size < 2 ? 'Select 2+ alarms to equalize' : `Equalize ${selected.size} alarm(s)`}
                         aria-label="Equalize gaps between selected alarms"
                     >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -48,10 +47,8 @@ export function Controls({ selected }: ControlsProps) {
                     </button>
                 </div>
 
-                {/* Divider */}
                 <div className="hidden sm:block w-px bg-line/50 self-stretch"></div>
 
-                {/* Template Actions Group */}
                 <div className="flex gap-2 flex-wrap">
                     <button
                         onClick={() => setShowLoad(true)}
@@ -75,10 +72,9 @@ export function Controls({ selected }: ControlsProps) {
                     </button>
                 </div>
 
-                {/* Clear All - Danger Action */}
                 <button
                     onClick={() => {
-                        if (window.confirm('ลบ Alarm ทั้งหมด? การดำเนินการนี้ไม่สามารถย้อนกลับได้')) {
+                        if (window.confirm('Delete all alarms? This action cannot be undone.')) {
                             clearAll();
                         }
                     }}
@@ -88,11 +84,10 @@ export function Controls({ selected }: ControlsProps) {
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
                     </svg>
-                    ล้างทั้งหมด
+                    Clear All
                 </button>
             </div>
 
-            {/* Shift Modal */}
             {showShift && (
                 <div
                     className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 backdrop-blur-sm animate-fade-in"
@@ -103,8 +98,8 @@ export function Controls({ selected }: ControlsProps) {
                     aria-labelledby="shift-modal-title"
                 >
                     <div className="bg-card border border-line p-6 rounded-2xl shadow-2xl w-96 animate-scale-in" onClick={(e) => e.stopPropagation()}>
-                        <h3 id="shift-modal-title" className="text-lg font-bold mb-2">เลื่อนเวลา Alarm</h3>
-                        <p className="text-sm text-muted/70 mb-4">ปรับเวลา {selected.size} Alarm ที่เลือก</p>
+                        <h3 id="shift-modal-title" className="text-lg font-bold mb-2">Shift Alarm Time</h3>
+                        <p className="text-sm text-muted/70 mb-4">Adjust the time for {selected.size} selected alarm(s).</p>
                         <div className="flex gap-2 mb-6">
                             <input
                                 type="number"
@@ -141,7 +136,6 @@ export function Controls({ selected }: ControlsProps) {
                 </div>
             )}
 
-            {/* Equalize Modal */}
             {showEqualize && (
                 <div
                     className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 backdrop-blur-sm animate-fade-in"
@@ -152,8 +146,8 @@ export function Controls({ selected }: ControlsProps) {
                     aria-labelledby="equalize-modal-title"
                 >
                     <div className="bg-card border border-line p-6 rounded-2xl shadow-2xl w-96 animate-scale-in" onClick={(e) => e.stopPropagation()}>
-                        <h3 id="equalize-modal-title" className="text-lg font-bold mb-2">จัดเวลาเท่าๆ กัน</h3>
-                        <p className="text-sm text-muted/70 mb-4">ตั้งค่าระยะห่างเท่ากันระหว่าง {selected.size} Alarm</p>
+                        <h3 id="equalize-modal-title" className="text-lg font-bold mb-2">Equalize Alarm Gaps</h3>
+                        <p className="text-sm text-muted/70 mb-4">Set a fixed gap between {selected.size} selected alarm(s).</p>
                         <div className="flex gap-2 mb-6">
                             <input
                                 type="number"
@@ -191,7 +185,6 @@ export function Controls({ selected }: ControlsProps) {
                 </div>
             )}
 
-            {/* Save Template Modal */}
             {showSave && (
                 <div
                     className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 backdrop-blur-sm animate-fade-in"
@@ -202,8 +195,8 @@ export function Controls({ selected }: ControlsProps) {
                     aria-labelledby="save-modal-title"
                 >
                     <div className="bg-card border border-line p-6 rounded-2xl shadow-2xl w-96 animate-scale-in" onClick={(e) => e.stopPropagation()}>
-                        <h3 id="save-modal-title" className="text-lg font-bold mb-2">บันทึก Template</h3>
-                        <p className="text-sm text-muted/70 mb-4">บันทึก Alarm ปัจจุบันเป็น Template</p>
+                        <h3 id="save-modal-title" className="text-lg font-bold mb-2">Save Template</h3>
+                        <p className="text-sm text-muted/70 mb-4">Save the current alarm list as a reusable template.</p>
                         <input
                             type="text"
                             placeholder="Template name..."
@@ -228,7 +221,6 @@ export function Controls({ selected }: ControlsProps) {
                 </div>
             )}
 
-            {/* Load Template Modal */}
             {showLoad && (
                 <div
                     className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 backdrop-blur-sm animate-fade-in"
@@ -239,8 +231,8 @@ export function Controls({ selected }: ControlsProps) {
                     aria-labelledby="load-modal-title"
                 >
                     <div className="bg-card border border-line p-6 rounded-2xl shadow-2xl w-96 max-h-[80vh] flex flex-col animate-scale-in" onClick={(e) => e.stopPropagation()}>
-                        <h3 id="load-modal-title" className="text-lg font-bold mb-2">โหลด Template</h3>
-                        <p className="text-sm text-muted/70 mb-4">เลือก Template ที่ต้องการโหลด</p>
+                        <h3 id="load-modal-title" className="text-lg font-bold mb-2">Load Template</h3>
+                        <p className="text-sm text-muted/70 mb-4">Choose a template to load into the current schedule.</p>
                         <div className="flex-1 overflow-y-auto space-y-2 mb-6 min-h-[100px]">
                             {templates.length === 0 ? (
                                 <div className="text-center py-8 text-muted/50">
