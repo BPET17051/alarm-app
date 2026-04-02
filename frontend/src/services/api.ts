@@ -1,4 +1,4 @@
-import type { AlarmItem } from '../types';
+import type { AlarmItem, AudioFile } from '../types';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
 
@@ -38,17 +38,17 @@ export async function clearAlarms(): Promise<void> {
     if (!res.ok) throw new Error('Failed to clear alarms');
 }
 
-export async function getAudioFiles(): Promise<{ id: string; name: string; url: string; size?: number; created_at?: string }[]> {
+export async function getAudioFiles(): Promise<AudioFile[]> {
     const res = await fetch(`${API_URL}/audio`);
     if (!res.ok) throw new Error('Failed to fetch audio files');
     return res.json();
 }
 
-export async function uploadAudio(file: File, customName?: string): Promise<{ id: string; name: string; url: string }> {
+export async function uploadAudio(file: File, displayName?: string): Promise<AudioFile> {
     const formData = new FormData();
     formData.append('file', file);
-    if (customName) {
-        formData.append('customName', customName);
+    if (displayName) {
+        formData.append('displayName', displayName);
     }
 
     const res = await fetch(`${API_URL}/audio`, {
@@ -79,8 +79,8 @@ export async function uploadAudio(file: File, customName?: string): Promise<{ id
     return res.json();
 }
 
-export async function deleteAudio(fileName: string): Promise<void> {
-    const res = await fetch(`${API_URL}/audio/${encodeURIComponent(fileName)}`, { method: 'DELETE' });
+export async function deleteAudio(audioId: string): Promise<void> {
+    const res = await fetch(`${API_URL}/audio/${encodeURIComponent(audioId)}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Failed to delete audio file');
 }
 

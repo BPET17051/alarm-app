@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import * as API from '../services/api';
+import { AUDIO_DISPLAY_NAME_MAX_LENGTH, sanitizeAudioDisplayName, stripAudioExtension } from '../utils/audio';
+import type { AudioFile } from '../types';
 
 export type AudioSelection =
-    | { source: 'upload'; file: File; name: string }
-    | { source: 'select'; id: string; name: string };
+    | { source: 'upload'; file: File; displayName: string; fileName: string }
+    | { source: 'select'; id: string; displayName: string; fileName: string };
 
 interface AudioSelectionModalProps {
     isOpen: boolean;
@@ -21,14 +23,15 @@ export function AudioSelectionModal({
     allowUpload = true
 }: AudioSelectionModalProps) {
     const [activeTab, setActiveTab] = useState<'upload' | 'select'>('select');
-    const [audioFiles, setAudioFiles] = useState<{ id: string; name: string; url: string }[]>([]);
+    const [audioFiles, setAudioFiles] = useState<AudioFile[]>([]);
     const [isLoadingAudio, setIsLoadingAudio] = useState(false);
 
     // Selection state within modal
     const [selectedId, setSelectedId] = useState<string | null>(null);
-    const [selectedName, setSelectedName] = useState<string>('');
+    const [selectedDisplayName, setSelectedDisplayName] = useState<string>('');
+    const [selectedFileName, setSelectedFileName] = useState<string>('');
     const [uploadFile, setUploadFile] = useState<File | null>(null);
-    const [uploadName, setUploadName] = useState<string>('');
+    const [uploadDisplayName, setUploadDisplayName] = useState<string>('');
 
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -38,11 +41,12 @@ export function AudioSelectionModal({
             if (allowUpload && currentSelection?.source === 'upload') {
                 setActiveTab('upload');
                 setUploadFile(currentSelection.file);
-                setUploadName(currentSelection.name);
+                setUploadDisplayName(currentSelection.displayName);
             } else if (currentSelection?.source === 'select') {
                 setActiveTab('select');
                 setSelectedId(currentSelection.id);
-                setSelectedName(currentSelection.name);
+                setSelectedDisplayName(currentSelection.displayName);
+                setSelectedFileName(currentSelection.fileName);
             } else {
                 setActiveTab('select');
             }
@@ -73,7 +77,7 @@ export function AudioSelectionModal({
 
         // Find the display name for confirmation message
         const audioFile = audioFiles.find(f => f.id === fileId);
-        const displayName = audioFile?.name || fileId;
+        const displayName = audioFile?.displayName || fileId;
 
         if (!confirm(`Are you sure you want to delete "${displayName}"?`)) return;
 
@@ -82,7 +86,8 @@ export function AudioSelectionModal({
             loadAudioFiles(); // Refresh list
             if (selectedId === fileId) {
                 setSelectedId(null);
-                setSelectedName('');
+                setSelectedDisplayName('');
+                setSelectedFileName('');
             }
         } catch (error) {
             console.error('Failed to delete audio', error);
@@ -95,14 +100,16 @@ export function AudioSelectionModal({
             onConfirm({
                 source: 'upload',
                 file: uploadFile,
-                name: uploadName || uploadFile.name
+                displayName: sanitizeAudioDisplayName(uploadDisplayName || uploadFile.name),
+                fileName: uploadFile.name
             });
             onClose();
         } else if (activeTab === 'select' && selectedId) {
             onConfirm({
                 source: 'select',
                 id: selectedId,
-                name: selectedName
+                displayName: selectedDisplayName,
+                fileName: selectedFileName
             });
             onClose();
         }
@@ -161,7 +168,8 @@ export function AudioSelectionModal({
                                             key={audio.id}
                                             onClick={() => {
                                                 setSelectedId(audio.id);
-                                                setSelectedName(audio.name);
+                                                setSelectedDisplayName(audio.displayName);
+                                                setSelectedFileName(audio.fileName);
                                             }}
                                             className={`p-3 rounded-lg cursor-pointer text-sm flex items-center justify-between group transition-colors ${selectedId === audio.id ? 'bg-primary/20 text-primary border border-primary/30' : 'hover:bg-bg-soft text-muted hover:text-fg border border-transparent'}`}
                                         >
@@ -169,7 +177,10 @@ export function AudioSelectionModal({
                                                 <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
                                                 </svg>
-                                                <span className="truncate">{audio.name}</span>
+                                                <div className="min-w-0">
+                                                    <div className="truncate font-semibold">{audio.displayName}</div>
+                                                    <div className="truncate text-xs text-muted/60">{audio.fileName}</div>
+                                                </div>
                                             </div>
                                             <div className="flex items-center gap-2">
                                                 {selectedId === audio.id && (
@@ -205,14 +216,13 @@ export function AudioSelectionModal({
                                     accept="audio/*"
                                     ref={fileInputRef}
                                     className="hidden"
-                                    onChange={e => {
-                                        const file = e.target.files?.[0];
-                                        if (file) {
-                                            setUploadFile(file);
-                                            const name = file.name.replace(/\.[^/.]+$/, "");
-                                            setUploadName(name);
-                                        }
-                                    }}
+                                            onChange={e => {
+                                                const file = e.target.files?.[0];
+                                                if (file) {
+                                                    setUploadFile(file);
+                                                    setUploadDisplayName(sanitizeAudioDisplayName(stripAudioExtension(file.name)));
+                                                }
+                                            }}
                                 />
                                 {uploadFile ? (
                                     <div className="text-primary font-bold flex flex-col items-center gap-2">
@@ -235,18 +245,19 @@ export function AudioSelectionModal({
                             {uploadFile && (
                                 <div>
                                     <label htmlFor="audio-name" className="block text-xs font-bold text-muted mb-1 uppercase tracking-wider">
-                                        Rename File <span className="text-muted/50 font-normal">(Optional)</span>
+                                        Display Name
                                     </label>
                                     <input
                                         id="audio-name"
                                         type="text"
-                                        value={uploadName}
-                                        onChange={e => setUploadName(e.target.value)}
-                                        placeholder="e.g. MorningAlert"
+                                        value={uploadDisplayName}
+                                        maxLength={AUDIO_DISPLAY_NAME_MAX_LENGTH}
+                                        onChange={e => setUploadDisplayName(sanitizeAudioDisplayName(e.target.value, ''))}
+                                        placeholder="e.g. Morning Alert"
                                         className="w-full bg-bg-soft border border-line rounded-lg p-3 text-sm outline-none focus:border-primary transition-all"
                                     />
                                     <p className="text-xs text-muted/50 mt-2">
-                                        Extension will be added automatically. Existing files with same name will be overwritten.
+                                        Used in the schedule list. Max {AUDIO_DISPLAY_NAME_MAX_LENGTH} characters.
                                     </p>
                                 </div>
                             )}

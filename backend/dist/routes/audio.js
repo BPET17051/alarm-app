@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const multer_1 = __importDefault(require("multer"));
 const db_1 = __importDefault(require("../db"));
+const audio_1 = require("../utils/audio");
 const router = (0, express_1.Router)();
 const upload = (0, multer_1.default)({ storage: multer_1.default.memoryStorage() });
 router.get('/', async (_req, res) => {
@@ -28,10 +29,11 @@ router.get('/', async (_req, res) => {
             .from('audio')
             .getPublicUrl(file.name);
         const metadata = metadataMap.get(file.name);
-        const displayName = metadata?.display_name || file.name;
+        const displayName = (0, audio_1.sanitizeAudioDisplayName)(metadata?.display_name || metadata?.original_name || file.name);
         return {
             id: file.name,
-            name: displayName,
+            displayName,
+            fileName: metadata?.original_name || file.name,
             url: publicUrlData.publicUrl,
             size: file.metadata?.size,
             created_at: file.created_at
@@ -45,10 +47,7 @@ router.post('/', upload.single('file'), async (req, res) => {
     }
     const file = req.file;
     const fileExt = file.originalname.split('.').pop();
-    let displayName = req.body.customName || file.originalname;
-    if (!displayName.toLowerCase().endsWith(`.${fileExt?.toLowerCase()}`)) {
-        displayName = `${displayName}.${fileExt}`;
-    }
+    const displayName = (0, audio_1.sanitizeAudioDisplayName)(req.body.displayName || (0, audio_1.stripAudioExtension)(file.originalname));
     const timestamp = Date.now();
     const safeExt = fileExt?.replace(/[^a-zA-Z0-9]/g, '') || 'mp3';
     const filePath = `${timestamp}.${safeExt}`;
@@ -79,7 +78,8 @@ router.post('/', upload.single('file'), async (req, res) => {
         .getPublicUrl(filePath);
     res.status(201).json({
         id: filePath,
-        name: displayName,
+        displayName,
+        fileName: file.originalname,
         url: publicUrlData.publicUrl
     });
 });

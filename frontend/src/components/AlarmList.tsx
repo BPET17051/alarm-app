@@ -3,6 +3,7 @@ import { useAlarms } from '../hooks/useAlarms';
 import * as API from '../services/api';
 import type { AlarmItem } from '../types';
 import { EditAlarmModal } from './EditAlarmModal';
+import { formatAudioName, playAudioFile } from '../utils/audio';
 
 interface AlarmListProps {
     selected: Set<string>;
@@ -56,16 +57,8 @@ function AlarmStatus({ item, mobile = false }: { item: AlarmItem; mobile?: boole
 export function AlarmList({ selected, onSelect }: AlarmListProps) {
     const { items, removeItem, updateItem, addItem } = useAlarms();
     const [editingAlarm, setEditingAlarm] = useState<AlarmItem | null>(null);
-
-    const getAudioDisplay = (audioName: string) => {
-        if (!audioName) {
-            return 'Default alarm sound';
-        }
-
-        const trimmed = audioName.trim();
-        const extIndex = trimmed.lastIndexOf('.');
-        return extIndex > 0 ? trimmed.slice(0, extIndex) : trimmed;
-    };
+    const [playingId, setPlayingId] = useState<string | null>(null);
+    const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
     const toggleSelect = (id: string) => {
         const next = new Set(selected);
@@ -75,14 +68,15 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
     };
 
     const handlePlay = async (item: AlarmItem) => {
-        if (item.audioId) {
-            try {
-                const url = API.getAudioUrl(item.audioId);
-                const audio = new Audio(url);
-                audio.play();
-            } catch (e) {
-                console.error(e);
-            }
+        if (!item.audioId || playingId) return;
+        setPlayingId(item.id);
+        try {
+            const url = API.getAudioUrl(item.audioId);
+            await playAudioFile(url);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setPlayingId(null);
         }
     };
 
@@ -91,53 +85,70 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
     };
 
     const handleDuplicate = async (item: AlarmItem) => {
-        await addItem(item.h, item.m, item.s || 0, item.audioId, item.audioName);
+        await addItem(item.h, item.m, item.s || 0, item.audioId, item.audioDisplayName);
+        setOpenMenuId(null);
     };
 
     const renderActions = (item: AlarmItem, mobile = false) => (
-        <div className={`flex items-center justify-end gap-1.5 ${mobile ? 'w-full' : 'opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity'}`}>
+        <div className={`relative flex items-center justify-end gap-1.5 ${mobile ? 'w-full' : 'opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity'}`}>
             {item.audioId && (
                 <button
                     onClick={() => handlePlay(item)}
-                    className={`${mobile ? 'p-3' : 'p-2'} hover:bg-primary/20 rounded-lg text-primary transition-all hover:scale-110`}
-                    title="Play audio preview"
-                    aria-label="Play audio preview"
+                    disabled={!!playingId}
+                    className={`${mobile ? 'p-3' : 'p-2'} hover:bg-primary/20 rounded-lg text-primary transition-all hover:scale-110 disabled:opacity-40 disabled:cursor-not-allowed`}
+                    title={playingId === item.id ? 'Playing...' : 'Play audio preview'}
+                    aria-label={playingId === item.id ? 'Playing audio preview' : 'Play audio preview'}
                 >
-                    <svg className={`${mobile ? 'w-5 h-5' : 'w-4 h-4'}`} fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd"></path>
-                    </svg>
+                    {playingId === item.id ? (
+                        <svg className={`${mobile ? 'w-5 h-5' : 'w-4 h-4'} animate-spin`} fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                    ) : (
+                        <svg className={`${mobile ? 'w-5 h-5' : 'w-4 h-4'}`} fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+                        </svg>
+                    )}
                 </button>
             )}
             <button
-                onClick={() => handleDuplicate(item)}
+                onClick={() => setOpenMenuId(current => current === item.id ? null : item.id)}
                 className={`${mobile ? 'p-3' : 'p-2'} hover:bg-primary/20 rounded-lg text-primary transition-all hover:scale-110`}
-                title="Duplicate alarm"
-                aria-label="Duplicate alarm"
+                title="More actions"
+                aria-label="More actions"
             >
                 <svg className={`${mobile ? 'w-5 h-5' : 'w-4 h-4'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6h.01M12 12h.01M12 18h.01" />
                 </svg>
             </button>
-            <button
-                onClick={() => setEditingAlarm(item)}
-                className={`${mobile ? 'p-3' : 'p-2'} hover:bg-primary/20 rounded-lg text-primary transition-all hover:scale-110`}
-                title="Edit alarm"
-                aria-label="Edit alarm"
-            >
-                <svg className={`${mobile ? 'w-5 h-5' : 'w-4 h-4'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
-                </svg>
-            </button>
-            <button
-                onClick={() => removeItem(item.id)}
-                className={`${mobile ? 'p-3' : 'p-2'} hover:bg-danger/20 rounded-lg text-danger transition-all hover:scale-110`}
-                title="Delete alarm"
-                aria-label="Delete alarm"
-            >
-                <svg className={`${mobile ? 'w-5 h-5' : 'w-4 h-4'}`} fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd"></path>
-                </svg>
-            </button>
+            {openMenuId === item.id && (
+                <div className={`absolute ${mobile ? 'right-4 bottom-14' : 'right-4 top-12'} z-20 min-w-[150px] rounded-xl border border-line bg-card shadow-xl p-1`}>
+                    <button
+                        onClick={() => handleDuplicate(item)}
+                        className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-bg-soft"
+                    >
+                        Duplicate
+                    </button>
+                    <button
+                        onClick={() => {
+                            setEditingAlarm(item);
+                            setOpenMenuId(null);
+                        }}
+                        className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-bg-soft"
+                    >
+                        Edit
+                    </button>
+                    <button
+                        onClick={() => {
+                            void removeItem(item.id);
+                            setOpenMenuId(null);
+                        }}
+                        className="w-full text-left px-3 py-2 rounded-lg text-sm text-danger hover:bg-danger/10"
+                    >
+                        Delete
+                    </button>
+                </div>
+            )}
         </div>
     );
 
@@ -194,7 +205,7 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
 
             <div className="max-h-[400px] overflow-y-auto space-y-3 pr-2 custom-scrollbar">
                 {items.map(item => {
-                    const audioDisplay = getAudioDisplay(item.audioName);
+                    const audioDisplay = formatAudioName(item.audioDisplayName);
 
                     return (
                         <div
@@ -204,7 +215,7 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                                 : 'bg-bg-soft/50 border-line hover:border-primary/50 hover:bg-bg-soft/80 hover:shadow-md'
                                 }`}
                             role="listitem"
-                            aria-label={`Alarm at ${item.h}:${item.m}:${item.s} - ${item.audioName || 'Default alarm sound'}`}
+                            aria-label={`Alarm at ${item.h}:${item.m}:${item.s} - ${formatAudioName(item.audioDisplayName)}`}
                         >
                             <div className="hidden md:flex items-center gap-4 p-4">
                                 <div className="w-11 flex items-center justify-center shrink-0">
@@ -227,7 +238,7 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                                 <div className="w-24 text-right shrink-0">
                                     <AlarmStatus item={item} />
                                 </div>
-                                <div className="w-40 shrink-0">
+                                <div className="w-24 shrink-0 relative">
                                     {renderActions(item)}
                                 </div>
                             </div>
@@ -255,7 +266,9 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                                         {audioDisplay}
                                     </div>
                                 </div>
-                                {renderActions(item, true)}
+                                <div className="relative">
+                                    {renderActions(item, true)}
+                                </div>
                             </div>
                         </div>
                     );

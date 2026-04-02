@@ -4,6 +4,7 @@ import * as API from '../services/api';
 import { AudioSelectionModal } from './AudioSelectionModal';
 import type { AudioSelection } from './AudioSelectionModal';
 import { normalizeTime } from '../utils/time';
+import { sanitizeAudioDisplayName } from '../utils/audio';
 
 export function AlarmForm() {
     const { addItem } = useAlarms();
@@ -25,24 +26,20 @@ export function AlarmForm() {
 
         try {
             let audioId = null;
-            let audioName = '';
-
-            // Default fallback if nothing selected? Or maybe validation error?
-            // For now, let's treat null as default sound or similar logic as before (backend handles empty audioId?)
-            // Actually previous code handled it. If audioSelection is null, it sends null/empty.
+            let audioDisplayName = '';
 
             if (audioSelection?.source === 'upload') {
-                const saved = await API.uploadAudio(audioSelection.file, audioSelection.name);
+                const saved = await API.uploadAudio(audioSelection.file, audioSelection.displayName);
                 audioId = saved.id;
-                audioName = saved.name || audioSelection.file.name;
+                audioDisplayName = sanitizeAudioDisplayName(saved.displayName || audioSelection.displayName);
             } else if (audioSelection?.source === 'select') {
                 audioId = audioSelection.id;
-                audioName = audioSelection.name;
+                audioDisplayName = sanitizeAudioDisplayName(audioSelection.displayName);
             }
 
             const nextTime = normalizeTime(h, m, s);
 
-            await addItem(nextTime.h, nextTime.m, nextTime.s, audioId, audioName);
+            await addItem(nextTime.h, nextTime.m, nextTime.s, audioId, audioDisplayName);
 
             // Show success feedback
             setShowSuccess(true);
@@ -79,9 +76,9 @@ export function AlarmForm() {
     const getSelectionDisplay = () => {
         if (!audioSelection) return 'Default Alarm Sound';
         if (audioSelection.source === 'upload') {
-            return `Upload: ${audioSelection.name || audioSelection.file.name}`;
+            return `Upload: ${audioSelection.displayName || audioSelection.file.name}`;
         }
-        return `Selected: ${audioSelection.name}`;
+        return `Selected: ${audioSelection.displayName}`;
     };
 
     return (

@@ -27,7 +27,8 @@ export function EditAlarmModal({ alarm, isOpen, onClose, onUpdate }: EditAlarmMo
             setAudioSelection(alarm.audioId ? {
                 source: 'select',
                 id: alarm.audioId,
-                name: alarm.audioName
+                displayName: alarm.audioDisplayName,
+                fileName: ''
             } : null);
         }
     }, [isOpen, alarm]);
@@ -38,10 +39,10 @@ export function EditAlarmModal({ alarm, isOpen, onClose, onUpdate }: EditAlarmMo
         e.preventDefault();
 
         const audioId = audioSelection?.source === 'select' ? audioSelection.id : null;
-        const audioName = audioSelection?.source === 'select' ? audioSelection.name : '';
+        const audioDisplayName = audioSelection?.source === 'select' ? audioSelection.displayName : '';
         const nextTime = normalizeTime(h, m, s);
 
-        await onUpdate(alarm.id, { h: nextTime.h, m: nextTime.m, s: nextTime.s, audioId, audioName });
+        await onUpdate(alarm.id, { h: nextTime.h, m: nextTime.m, s: nextTime.s, audioId, audioDisplayName });
         onClose();
     };
 
@@ -63,7 +64,7 @@ export function EditAlarmModal({ alarm, isOpen, onClose, onUpdate }: EditAlarmMo
 
     const getSelectionDisplay = () => {
         if (!audioSelection || audioSelection.source !== 'select') return 'Default Alarm Sound';
-        return `Selected: ${audioSelection.name}`;
+        return `Selected: ${audioSelection.displayName}`;
     };
 
     return (
@@ -157,9 +158,9 @@ export function EditAlarmModal({ alarm, isOpen, onClose, onUpdate }: EditAlarmMo
                                     </svg>
                                 </div>
                             </div>
-                            {alarm.audioName && !audioSelection && (
+                            {alarm.audioDisplayName && !audioSelection && (
                                 <p className="mt-2 text-xs text-muted/70">
-                                    Current audio: {alarm.audioName}
+                                    Current audio: {alarm.audioDisplayName}
                                 </p>
                             )}
                             <p className="mt-2 text-xs text-muted/60">

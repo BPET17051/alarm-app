@@ -11,7 +11,7 @@ export function Controls({ selected }: ControlsProps) {
     const [showLoad, setShowLoad] = useState(false);
     const [showShift, setShowShift] = useState(false);
     const [showEqualize, setShowEqualize] = useState(false);
-    const [tplName, setTplName] = useState('');
+    const [templateName, setTemplateName] = useState('');
     const [shiftAmount, setShiftAmount] = useState(0);
     const [shiftUnit, setShiftUnit] = useState<'m' | 's'>('m');
     const [gapAmount, setGapAmount] = useState(5);
@@ -201,17 +201,17 @@ export function Controls({ selected }: ControlsProps) {
                             type="text"
                             placeholder="Template name..."
                             className="w-full bg-bg-soft border border-line rounded-lg p-3 mb-6 focus:ring-2 focus:ring-primary focus:border-primary outline-none"
-                            value={tplName}
-                            onChange={e => setTplName(e.target.value)}
-                            onKeyDown={e => e.key === 'Enter' && tplName && (saveTemplate(tplName), setShowSave(false), setTplName(''))}
+                            value={templateName}
+                            onChange={e => setTemplateName(e.target.value)}
+                            onKeyDown={e => e.key === 'Enter' && templateName && (saveTemplate(templateName), setShowSave(false), setTemplateName(''))}
                             autoFocus
                             aria-label="Template name"
                         />
                         <div className="flex justify-end gap-2">
                             <button onClick={() => setShowSave(false)} className="px-4 py-2 rounded-lg hover:bg-white/5 transition-colors">Cancel</button>
                             <button
-                                onClick={() => { saveTemplate(tplName); setShowSave(false); setTplName(''); }}
-                                disabled={!tplName}
+                                onClick={() => { saveTemplate(templateName); setShowSave(false); setTemplateName(''); }}
+                                disabled={!templateName}
                                 className="px-4 py-2 rounded-lg bg-primary text-white hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-semibold"
                             >
                                 Save

@@ -12,7 +12,7 @@ interface AlarmsContextType {
     templates: Template[];
     playedIds: Set<string>;
     syncPlaybackDay: (dayKey: string) => void;
-    addItem: (h: number, m: number, s: number, audioId: string | null, audioName: string) => Promise<void>;
+    addItem: (h: number, m: number, s: number, audioId: string | null, audioDisplayName: string) => Promise<void>;
     updateItem: (id: string, updates: Partial<AlarmItem>) => Promise<void>;
     removeItem: (id: string) => Promise<void>;
     clearAll: () => Promise<void>;
@@ -101,11 +101,11 @@ export function AlarmsProvider({ children }: { children: ReactNode }) {
     }, [loadAlarms]);
 
     // Actions
-    const addItem = useCallback(async (h: number, m: number, s: number, audioId: string | null, audioName: string) => {
+    const addItem = useCallback(async (h: number, m: number, s: number, audioId: string | null, audioDisplayName: string) => {
         try {
             const nextTime = normalizeTime(h, m, s);
-            console.log('Adding item:', { ...nextTime, audioId, audioName });
-            const newItem = await API.createAlarm({ ...nextTime, audioId, audioName });
+            console.log('Adding item:', { ...nextTime, audioId, audioDisplayName });
+            const newItem = await API.createAlarm({ ...nextTime, audioId, audioDisplayName });
             console.log('Added item response:', newItem);
             setItems(prev => {
                 const next = [...prev, newItem].sort((a, b) => (a.h * 3600 + a.m * 60 + a.s) - (b.h * 3600 + b.m * 60 + b.s));
@@ -221,7 +221,7 @@ export function AlarmsProvider({ children }: { children: ReactNode }) {
             await clearAll();
             // Add items sequentially to preserve order
             for (const item of tpl.items) {
-                await addItem(item.h, item.m, item.s || 0, item.audioId, item.audioName);
+                await addItem(item.h, item.m, item.s || 0, item.audioId, item.audioDisplayName);
             }
         }
     }, [templates, clearAll, addItem]);

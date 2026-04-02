@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import supabase from '../db';
+import { sanitizeAudioDisplayName, stripAudioExtension } from '../utils/audio';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -31,11 +32,12 @@ router.get('/', async (_req, res) => {
       .getPublicUrl(file.name);
 
     const metadata = metadataMap.get(file.name);
-    const displayName = metadata?.display_name || file.name;
+    const displayName = sanitizeAudioDisplayName(metadata?.display_name || metadata?.original_name || file.name);
 
     return {
       id: file.name,
-      name: displayName,
+      displayName,
+      fileName: metadata?.original_name || file.name,
       url: publicUrlData.publicUrl,
       size: file.metadata?.size,
       created_at: file.created_at
@@ -52,11 +54,7 @@ router.post('/', upload.single('file'), async (req, res) => {
 
   const file = req.file;
   const fileExt = file.originalname.split('.').pop();
-
-  let displayName = req.body.customName || file.originalname;
-  if (!displayName.toLowerCase().endsWith(`.${fileExt?.toLowerCase()}`)) {
-    displayName = `${displayName}.${fileExt}`;
-  }
+  const displayName = sanitizeAudioDisplayName(req.body.displayName || stripAudioExtension(file.originalname));
 
   const timestamp = Date.now();
   const safeExt = fileExt?.replace(/[^a-zA-Z0-9]/g, '') || 'mp3';
@@ -94,7 +92,8 @@ router.post('/', upload.single('file'), async (req, res) => {
 
   res.status(201).json({
     id: filePath,
-    name: displayName,
+    displayName,
+    fileName: file.originalname,
     url: publicUrlData.publicUrl
   });
 });

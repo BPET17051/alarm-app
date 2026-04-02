@@ -12,7 +12,7 @@ function mapAlarm(a) {
         ...a,
         s: a.s || 0,
         audioId: a.audio_id,
-        audioName: a.audio_name,
+        audioDisplayName: a.audio_name,
         audio_id: undefined,
         audio_name: undefined
     };
@@ -47,7 +47,7 @@ router.get('/', async (req, res) => {
     res.json(data.map(mapAlarm));
 });
 router.post('/', async (req, res) => {
-    const { h, m, s, audioId, audioName } = req.body;
+    const { h, m, s, audioId, audioDisplayName } = req.body;
     if (h === undefined || m === undefined) {
         return res.status(400).json({ message: 'Missing time (h, m)' });
     }
@@ -58,7 +58,7 @@ router.post('/', async (req, res) => {
         .insert({
         h, m, s: sec,
         audio_id: audioId || null,
-        audio_name: audioName || '',
+        audio_name: audioDisplayName || '',
         notify_status: 'PENDING',
         created_at: now,
         updated_at: now
@@ -71,7 +71,7 @@ router.post('/', async (req, res) => {
 });
 router.put('/:id', async (req, res) => {
     const { id } = req.params;
-    const { h, m, s, audioId, audioName, notify_status } = req.body;
+    const { h, m, s, audioId, audioDisplayName, notify_status } = req.body;
     const now = new Date().toISOString();
     const updates = { updated_at: now };
     if (h !== undefined)
@@ -82,8 +82,8 @@ router.put('/:id', async (req, res) => {
         updates.s = s;
     if (audioId !== undefined)
         updates.audio_id = audioId;
-    if (audioName !== undefined)
-        updates.audio_name = audioName;
+    if (audioDisplayName !== undefined)
+        updates.audio_name = audioDisplayName;
     if (notify_status !== undefined)
         updates.notify_status = notify_status;
     const { data, error } = await db_1.default

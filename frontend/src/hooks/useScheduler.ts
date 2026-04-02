@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { AlarmItem } from '../types';
 import * as API from '../services/api';
+import { playAlarm } from '../utils/audio';
 
 export function useScheduler(
     items: AlarmItem[],
@@ -44,37 +45,11 @@ export function useScheduler(
                         return;
                     }
 
-                    // Play audio
+                    // Play audio — promise resolves after playback ends (or beep falls back)
                     try {
-                        if (item.audioId) {
-                            const url = API.getAudioUrl(item.audioId);
-                            const audio = new Audio(url);
-                            const promise = audio.play();
-                            if (promise !== undefined) {
-                                await promise;
-                            }
-                            audio.onended = () => markPlayed(item.id, 'SENT');
-                            audio.onerror = () => markPlayed(item.id, 'FAILED');
-                        } else {
-                            // Beep
-                            const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-                            if (AudioContextClass) {
-                                const ctx = new AudioContextClass();
-                                const osc = ctx.createOscillator();
-                                const gain = ctx.createGain();
-                                osc.connect(gain);
-                                gain.connect(ctx.destination);
-                                osc.start();
-                                setTimeout(() => {
-                                    osc.stop();
-                                    ctx.close();
-                                    markPlayed(item.id, 'SENT');
-                                }, 1000);
-                            } else {
-                                console.error('AudioContext not supported');
-                                markPlayed(item.id, 'FAILED');
-                            }
-                        }
+                        const audioUrl = item.audioId ? API.getAudioUrl(item.audioId) : null;
+                        const result = await playAlarm(audioUrl);
+                        markPlayed(item.id, result !== 'failed' ? 'SENT' : 'FAILED');
                     } catch (e) {
                         console.error(e);
                         markPlayed(item.id, 'FAILED');

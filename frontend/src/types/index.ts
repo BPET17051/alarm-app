@@ -4,7 +4,7 @@ export interface AlarmItem {
     m: number;
     s: number;
     audioId: string | null;
-    audioName: string;
+    audioDisplayName: string;
     notify_status: 'PENDING' | 'SENT' | 'FAILED';
 }
 
@@ -15,7 +15,9 @@ export interface Template {
 
 export interface AudioFile {
     id: string;
-    name: string;
-    type: string;
-    blob: Blob;
+    displayName: string;
+    fileName: string;
+    url: string;
+    size?: number;
+    created_at?: string;
 }
