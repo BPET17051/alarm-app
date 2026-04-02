@@ -163,8 +163,8 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
 
     return (
         <div className="space-y-3">
-            <div className="hidden md:grid sticky top-0 bg-card/95 backdrop-blur-sm z-10 grid-cols-[44px_140px_minmax(0,1fr)_96px_164px] items-center gap-4 px-4 py-3 text-xs font-bold text-muted/70 uppercase tracking-wider border-b border-line/50">
-                <div className="flex items-center justify-center">
+            <div className="hidden md:flex sticky top-0 bg-card/95 backdrop-blur-sm z-10 items-center gap-4 px-4 py-3 text-xs font-bold text-muted/70 uppercase tracking-wider border-b border-line/50">
+                <div className="w-11 flex items-center justify-center">
                     <input
                         type="checkbox"
                         checked={selected.size === items.length && items.length > 0}
@@ -174,10 +174,10 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                         title={selected.size === items.length ? 'Deselect all' : 'Select all'}
                     />
                 </div>
-                <div>Time</div>
-                <div>Audio</div>
-                <div className="text-right">Status</div>
-                <div className="text-right">Actions</div>
+                <div className="w-36">Time</div>
+                <div className="flex-1 min-w-0">Audio</div>
+                <div className="w-24 text-right">Status</div>
+                <div className="w-40 text-right">Actions</div>
             </div>
 
             <div className="md:hidden flex items-center justify-between px-4 py-2 mb-2">
@@ -206,8 +206,8 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                             role="listitem"
                             aria-label={`Alarm at ${item.h}:${item.m}:${item.s} - ${item.audioName || 'Default alarm sound'}`}
                         >
-                            <div className="hidden md:grid grid-cols-[44px_140px_minmax(0,1fr)_96px_164px] items-center gap-4 p-4">
-                                <div className="flex items-center justify-center">
+                            <div className="hidden md:flex items-center gap-4 p-4">
+                                <div className="w-11 flex items-center justify-center shrink-0">
                                     <input
                                         type="checkbox"
                                         checked={selected.has(item.id)}
@@ -216,16 +216,18 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                                         aria-label={`Select alarm at ${item.h}:${item.m}:${item.s}`}
                                     />
                                 </div>
-                                <AlarmTime item={item} />
-                                <div className="min-w-0">
+                                <div className="w-36 shrink-0">
+                                    <AlarmTime item={item} />
+                                </div>
+                                <div className="flex-1 min-w-0">
                                     <div className="font-bold text-xl leading-tight text-fg truncate" title={audioDisplay}>
                                         {audioDisplay}
                                     </div>
                                 </div>
-                                <div className="text-right">
+                                <div className="w-24 text-right shrink-0">
                                     <AlarmStatus item={item} />
                                 </div>
-                                <div className="text-right">
+                                <div className="w-40 shrink-0">
                                     {renderActions(item)}
                                 </div>
                             </div>
