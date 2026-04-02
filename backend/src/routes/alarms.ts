@@ -1,31 +1,56 @@
 import { Router } from 'express';
 import supabase from '../db';
+import { getCurrentBangkokDayBounds } from '../utils/dayKey';
 
 const router = Router();
 
-router.get('/', async (req, res) => {
-    const { data, error } = await supabase
-        .from('alarms')
-        .select('*')
-        .order('h', { ascending: true })
-        .order('m', { ascending: true })
-        .order('s', { ascending: true });
-
-    if (error) return res.status(500).json({ message: error.message });
-
-    const mapped = data.map(a => ({
+function mapAlarm(a: any) {
+    return {
         ...a,
         s: a.s || 0,
         audioId: a.audio_id,
         audioName: a.audio_name,
         audio_id: undefined,
         audio_name: undefined
-    }));
-    res.json(mapped);
+    };
+}
+
+async function cleanupStaleAlarms(startIso: string, endIso: string) {
+    const [{ error: deleteOldError }, { error: deleteFutureError }] = await Promise.all([
+        supabase.from('alarms').delete().lt('created_at', startIso),
+        supabase.from('alarms').delete().gte('created_at', endIso)
+    ]);
+
+    if (deleteOldError || deleteFutureError) {
+        throw new Error(deleteOldError?.message || deleteFutureError?.message);
+    }
+}
+
+router.get('/', async (req, res) => {
+    const { startIso, endIso } = getCurrentBangkokDayBounds();
+
+    try {
+        await cleanupStaleAlarms(startIso, endIso);
+    } catch (error) {
+        return res.status(500).json({ message: error instanceof Error ? error.message : 'Failed to clean alarms' });
+    }
+
+    const { data, error } = await supabase
+        .from('alarms')
+        .select('*')
+        .gte('created_at', startIso)
+        .lt('created_at', endIso)
+        .order('h', { ascending: true })
+        .order('m', { ascending: true })
+        .order('s', { ascending: true });
+
+    if (error) return res.status(500).json({ message: error.message });
+
+    res.json(data.map(mapAlarm));
 });
 
 router.post('/', async (req, res) => {
-    const { h, m, s, label, audioId, audioName } = req.body;
+    const { h, m, s, audioId, audioName } = req.body;
 
     if (h === undefined || m === undefined) {
         return res.status(400).json({ message: 'Missing time (h, m)' });
@@ -38,7 +63,6 @@ router.post('/', async (req, res) => {
         .from('alarms')
         .insert({
             h, m, s: sec,
-            label: label || '',
             audio_id: audioId || null,
             audio_name: audioName || '',
             notify_status: 'PENDING',
@@ -50,26 +74,18 @@ router.post('/', async (req, res) => {
 
     if (error) return res.status(500).json({ message: error.message });
 
-    res.status(201).json({
-        ...data,
-        s: data.s || 0,
-        audioId: data.audio_id,
-        audioName: data.audio_name,
-        audio_id: undefined,
-        audio_name: undefined
-    });
+    res.status(201).json(mapAlarm(data));
 });
 
 router.put('/:id', async (req, res) => {
     const { id } = req.params;
-    const { h, m, s, label, audioId, audioName, notify_status } = req.body;
+    const { h, m, s, audioId, audioName, notify_status } = req.body;
     const now = new Date().toISOString();
 
     const updates: any = { updated_at: now };
     if (h !== undefined) updates.h = h;
     if (m !== undefined) updates.m = m;
     if (s !== undefined) updates.s = s;
-    if (label !== undefined) updates.label = label;
     if (audioId !== undefined) updates.audio_id = audioId;
     if (audioName !== undefined) updates.audio_name = audioName;
     if (notify_status !== undefined) updates.notify_status = notify_status;
@@ -83,14 +99,7 @@ router.put('/:id', async (req, res) => {
 
     if (error) return res.status(500).json({ message: error.message });
 
-    res.json({
-        ...data,
-        s: data.s || 0,
-        audioId: data.audio_id,
-        audioName: data.audio_name,
-        audio_id: undefined,
-        audio_name: undefined
-    });
+    res.json(mapAlarm(data));
 });
 
 router.delete('/:id', async (req, res) => {
@@ -101,7 +110,8 @@ router.delete('/:id', async (req, res) => {
 });
 
 router.delete('/', async (req, res) => {
-    const { error } = await supabase.from('alarms').delete().neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
+    const { startIso, endIso } = getCurrentBangkokDayBounds();
+    const { error } = await supabase.from('alarms').delete().gte('created_at', startIso).lt('created_at', endIso);
     if (error) return res.status(500).json({ message: error.message });
     res.status(204).send();
 });

@@ -3,6 +3,7 @@ import type { AlarmItem, Template } from '../types';
 import * as API from '../services/api';
 import * as Storage from '../services/storage';
 import { playTestAnnouncement, unlockBrowserAudio, type AudioTestLanguage, type AudioTestResult } from '../services/audioTest';
+import { normalizeTime } from '../utils/time';
 
 interface AlarmsContextType {
     items: AlarmItem[];
@@ -11,7 +12,7 @@ interface AlarmsContextType {
     templates: Template[];
     playedIds: Set<string>;
     syncPlaybackDay: (dayKey: string) => void;
-    addItem: (h: number, m: number, s: number, label: string, audioId: string | null, audioName: string) => Promise<void>;
+    addItem: (h: number, m: number, s: number, audioId: string | null, audioName: string) => Promise<void>;
     updateItem: (id: string, updates: Partial<AlarmItem>) => Promise<void>;
     removeItem: (id: string) => Promise<void>;
     clearAll: () => Promise<void>;
@@ -48,25 +49,28 @@ export function AlarmsProvider({ children }: { children: ReactNode }) {
     });
     const [isAudioEnabled, setIsAudioEnabled] = useState(false);
 
+    const loadAlarms = useCallback(async () => {
+        try {
+            const data = await API.getAlarms();
+            console.log('Loaded alarms:', data);
+            setItems(data);
+        } catch (e: unknown) {
+            console.error('Failed to load alarms', e);
+        }
+    }, []);
+
     // Load initial state
     useEffect(() => {
-        const loadAlarms = async () => {
-            try {
-                const data = await API.getAlarms();
-                console.log('Loaded alarms:', data);
-                setItems(data);
-            } catch (e: unknown) {
-                console.error('Failed to load alarms', e);
-            }
-        };
+        const timeoutId = window.setTimeout(() => {
+            void loadAlarms();
+        }, 0);
 
-        loadAlarms();
-
-        // Load templates from API
         API.getTemplates()
             .then(setTemplates)
             .catch(err => console.error('Failed to load templates:', err));
-    }, []);
+
+        return () => window.clearTimeout(timeoutId);
+    }, [loadAlarms]);
 
     // Persistence effects
     useEffect(() => {
@@ -82,18 +86,26 @@ export function AlarmsProvider({ children }: { children: ReactNode }) {
     }, [playedDay, playedIds]);
 
     const syncPlaybackDay = useCallback((dayKey: string) => {
+        let dayChanged = false;
+
         setPlayedDay(currentDay => {
-            if (currentDay === dayKey) return currentDay;
-            setPlayedIds(new Set());
+            dayChanged = currentDay !== dayKey;
             return dayKey;
         });
-    }, []);
+
+        if (!dayChanged) return;
+
+        setPlayedIds(new Set());
+        setItems([]);
+        void loadAlarms();
+    }, [loadAlarms]);
 
     // Actions
-    const addItem = useCallback(async (h: number, m: number, s: number, label: string, audioId: string | null, audioName: string) => {
+    const addItem = useCallback(async (h: number, m: number, s: number, audioId: string | null, audioName: string) => {
         try {
-            console.log('Adding item:', { h, m, s, label, audioId, audioName });
-            const newItem = await API.createAlarm({ h, m, s, label, audioId, audioName });
+            const nextTime = normalizeTime(h, m, s);
+            console.log('Adding item:', { ...nextTime, audioId, audioName });
+            const newItem = await API.createAlarm({ ...nextTime, audioId, audioName });
             console.log('Added item response:', newItem);
             setItems(prev => {
                 const next = [...prev, newItem].sort((a, b) => (a.h * 3600 + a.m * 60 + a.s) - (b.h * 3600 + b.m * 60 + b.s));
@@ -109,12 +121,20 @@ export function AlarmsProvider({ children }: { children: ReactNode }) {
 
     const updateItem = useCallback(async (id: string, updates: Partial<AlarmItem>) => {
         try {
-            const updated = await API.updateAlarm(id, updates);
+            const currentItem = items.find(item => item.id === id);
+            const normalizedUpdates = currentItem && (updates.h !== undefined || updates.m !== undefined || updates.s !== undefined)
+                ? normalizeTime(
+                    updates.h ?? currentItem.h,
+                    updates.m ?? currentItem.m,
+                    updates.s ?? currentItem.s
+                )
+                : {};
+            const updated = await API.updateAlarm(id, { ...updates, ...normalizedUpdates });
             setItems(prev => prev.map(item => item.id === id ? updated : item).sort((a, b) => (a.h * 3600 + a.m * 60 + a.s) - (b.h * 3600 + b.m * 60 + b.s)));
         } catch (e: unknown) {
             console.error('Failed to update alarm', e);
         }
-    }, []);
+    }, [items]);
 
     const removeItem = useCallback(async (id: string) => {
         try {
@@ -201,7 +221,7 @@ export function AlarmsProvider({ children }: { children: ReactNode }) {
             await clearAll();
             // Add items sequentially to preserve order
             for (const item of tpl.items) {
-                await addItem(item.h, item.m, item.s || 0, item.label || '', item.audioId, item.audioName);
+                await addItem(item.h, item.m, item.s || 0, item.audioId, item.audioName);
             }
         }
     }, [templates, clearAll, addItem]);

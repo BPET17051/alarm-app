@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import type { AlarmItem } from '../types';
 import { AudioSelectionModal } from './AudioSelectionModal';
 import type { AudioSelection } from './AudioSelectionModal';
+import { normalizeTime } from '../utils/time';
 
 interface EditAlarmModalProps {
     alarm: AlarmItem;
@@ -14,7 +15,6 @@ export function EditAlarmModal({ alarm, isOpen, onClose, onUpdate }: EditAlarmMo
     const [h, setH] = useState(alarm.h);
     const [m, setM] = useState(alarm.m);
     const [s, setS] = useState(alarm.s || 0);
-    const [label, setLabel] = useState(alarm.label || '');
     const [isAudioModalOpen, setIsAudioModalOpen] = useState(false);
     const [audioSelection, setAudioSelection] = useState<AudioSelection | null>(null);
 
@@ -24,7 +24,6 @@ export function EditAlarmModal({ alarm, isOpen, onClose, onUpdate }: EditAlarmMo
             setH(alarm.h);
             setM(alarm.m);
             setS(alarm.s || 0);
-            setLabel(alarm.label || '');
             setAudioSelection(alarm.audioId ? {
                 source: 'select',
                 id: alarm.audioId,
@@ -38,16 +37,29 @@ export function EditAlarmModal({ alarm, isOpen, onClose, onUpdate }: EditAlarmMo
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        if (h < 0 || h > 23 || m < 0 || m > 59 || s < 0 || s > 59) return;
-
         const audioId = audioSelection?.source === 'select' ? audioSelection.id : null;
         const audioName = audioSelection?.source === 'select' ? audioSelection.name : '';
+        const nextTime = normalizeTime(h, m, s);
 
-        await onUpdate(alarm.id, { h, m, s, label, audioId, audioName });
+        await onUpdate(alarm.id, { h: nextTime.h, m: nextTime.m, s: nextTime.s, audioId, audioName });
         onClose();
     };
 
     const isValid = !isNaN(h) && !isNaN(m) && !isNaN(s);
+
+    const handleTimeChange = (part: 'h' | 'm' | 's', rawValue: string) => {
+        const parsed = Number.parseInt(rawValue, 10);
+        const nextValue = Number.isNaN(parsed) ? 0 : parsed;
+        const nextTime = normalizeTime(
+            part === 'h' ? nextValue : h,
+            part === 'm' ? nextValue : m,
+            part === 's' ? nextValue : s
+        );
+
+        setH(nextTime.h);
+        setM(nextTime.m);
+        setS(nextTime.s);
+    };
 
     const getSelectionDisplay = () => {
         if (!audioSelection || audioSelection.source !== 'select') return 'Default Alarm Sound';
@@ -78,7 +90,7 @@ export function EditAlarmModal({ alarm, isOpen, onClose, onUpdate }: EditAlarmMo
                                             min="0"
                                             max="23"
                                             value={h}
-                                            onChange={e => setH(parseInt(e.target.value) || 0)}
+                                            onChange={e => handleTimeChange('h', e.target.value)}
                                             className="w-full bg-bg border border-line rounded-lg p-3 text-center text-2xl font-bold focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all"
                                         />
                                     </div>
@@ -93,7 +105,7 @@ export function EditAlarmModal({ alarm, isOpen, onClose, onUpdate }: EditAlarmMo
                                             min="0"
                                             max="59"
                                             value={m}
-                                            onChange={e => setM(parseInt(e.target.value) || 0)}
+                                            onChange={e => handleTimeChange('m', e.target.value)}
                                             className="w-full bg-bg border border-line rounded-lg p-3 text-center text-2xl font-bold focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all"
                                         />
                                     </div>
@@ -108,7 +120,7 @@ export function EditAlarmModal({ alarm, isOpen, onClose, onUpdate }: EditAlarmMo
                                             min="0"
                                             max="59"
                                             value={s}
-                                            onChange={e => setS(parseInt(e.target.value) || 0)}
+                                            onChange={e => handleTimeChange('s', e.target.value)}
                                             className="w-full bg-bg border border-line rounded-lg p-3 text-center text-2xl font-bold focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all"
                                         />
                                     </div>
@@ -153,20 +165,6 @@ export function EditAlarmModal({ alarm, isOpen, onClose, onUpdate }: EditAlarmMo
                             <p className="mt-2 text-xs text-muted/60">
                                 Editing uses only audio already uploaded to the system.
                             </p>
-                        </div>
-
-                        <div>
-                            <label htmlFor="edit-alarm-label" className="block text-sm font-bold text-muted mb-2 uppercase tracking-wider">
-                                Label <span className="text-muted/50 font-normal">(Optional)</span>
-                            </label>
-                            <input
-                                id="edit-alarm-label"
-                                type="text"
-                                placeholder="e.g., Meeting, Wake up, Break time..."
-                                className="w-full bg-bg-soft border border-line rounded-xl p-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
-                                value={label}
-                                onChange={e => setLabel(e.target.value)}
-                            />
                         </div>
 
                         <div className="flex gap-3 pt-2">

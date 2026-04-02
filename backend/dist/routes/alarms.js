@@ -5,28 +5,49 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const db_1 = __importDefault(require("../db"));
+const dayKey_1 = require("../utils/dayKey");
 const router = (0, express_1.Router)();
-router.get('/', async (req, res) => {
-    const { data, error } = await db_1.default
-        .from('alarms')
-        .select('*')
-        .order('h', { ascending: true })
-        .order('m', { ascending: true })
-        .order('s', { ascending: true });
-    if (error)
-        return res.status(500).json({ message: error.message });
-    const mapped = data.map(a => ({
+function mapAlarm(a) {
+    return {
         ...a,
         s: a.s || 0,
         audioId: a.audio_id,
         audioName: a.audio_name,
         audio_id: undefined,
         audio_name: undefined
-    }));
-    res.json(mapped);
+    };
+}
+async function cleanupStaleAlarms(startIso, endIso) {
+    const [{ error: deleteOldError }, { error: deleteFutureError }] = await Promise.all([
+        db_1.default.from('alarms').delete().lt('created_at', startIso),
+        db_1.default.from('alarms').delete().gte('created_at', endIso)
+    ]);
+    if (deleteOldError || deleteFutureError) {
+        throw new Error(deleteOldError?.message || deleteFutureError?.message);
+    }
+}
+router.get('/', async (req, res) => {
+    const { startIso, endIso } = (0, dayKey_1.getCurrentBangkokDayBounds)();
+    try {
+        await cleanupStaleAlarms(startIso, endIso);
+    }
+    catch (error) {
+        return res.status(500).json({ message: error instanceof Error ? error.message : 'Failed to clean alarms' });
+    }
+    const { data, error } = await db_1.default
+        .from('alarms')
+        .select('*')
+        .gte('created_at', startIso)
+        .lt('created_at', endIso)
+        .order('h', { ascending: true })
+        .order('m', { ascending: true })
+        .order('s', { ascending: true });
+    if (error)
+        return res.status(500).json({ message: error.message });
+    res.json(data.map(mapAlarm));
 });
 router.post('/', async (req, res) => {
-    const { h, m, s, label, audioId, audioName } = req.body;
+    const { h, m, s, audioId, audioName } = req.body;
     if (h === undefined || m === undefined) {
         return res.status(400).json({ message: 'Missing time (h, m)' });
     }
@@ -36,7 +57,6 @@ router.post('/', async (req, res) => {
         .from('alarms')
         .insert({
         h, m, s: sec,
-        label: label || '',
         audio_id: audioId || null,
         audio_name: audioName || '',
         notify_status: 'PENDING',
@@ -47,18 +67,11 @@ router.post('/', async (req, res) => {
         .single();
     if (error)
         return res.status(500).json({ message: error.message });
-    res.status(201).json({
-        ...data,
-        s: data.s || 0,
-        audioId: data.audio_id,
-        audioName: data.audio_name,
-        audio_id: undefined,
-        audio_name: undefined
-    });
+    res.status(201).json(mapAlarm(data));
 });
 router.put('/:id', async (req, res) => {
     const { id } = req.params;
-    const { h, m, s, label, audioId, audioName, notify_status } = req.body;
+    const { h, m, s, audioId, audioName, notify_status } = req.body;
     const now = new Date().toISOString();
     const updates = { updated_at: now };
     if (h !== undefined)
@@ -67,8 +80,6 @@ router.put('/:id', async (req, res) => {
         updates.m = m;
     if (s !== undefined)
         updates.s = s;
-    if (label !== undefined)
-        updates.label = label;
     if (audioId !== undefined)
         updates.audio_id = audioId;
     if (audioName !== undefined)
@@ -83,14 +94,7 @@ router.put('/:id', async (req, res) => {
         .single();
     if (error)
         return res.status(500).json({ message: error.message });
-    res.json({
-        ...data,
-        s: data.s || 0,
-        audioId: data.audio_id,
-        audioName: data.audio_name,
-        audio_id: undefined,
-        audio_name: undefined
-    });
+    res.json(mapAlarm(data));
 });
 router.delete('/:id', async (req, res) => {
     const { id } = req.params;
@@ -100,7 +104,8 @@ router.delete('/:id', async (req, res) => {
     res.status(204).send();
 });
 router.delete('/', async (req, res) => {
-    const { error } = await db_1.default.from('alarms').delete().neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
+    const { startIso, endIso } = (0, dayKey_1.getCurrentBangkokDayBounds)();
+    const { error } = await db_1.default.from('alarms').delete().gte('created_at', startIso).lt('created_at', endIso);
     if (error)
         return res.status(500).json({ message: error.message });
     res.status(204).send();

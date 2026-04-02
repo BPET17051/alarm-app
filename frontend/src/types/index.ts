@@ -3,7 +3,6 @@ export interface AlarmItem {
     h: number;
     m: number;
     s: number;
-    label: string;
     audioId: string | null;
     audioName: string;
     notify_status: 'PENDING' | 'SENT' | 'FAILED';

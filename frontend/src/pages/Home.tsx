@@ -15,20 +15,20 @@ export function Home() {
     const { serverTime, offset, isSyncing, error } = useTimeSync();
     const dayKey = formatDayKey(serverTime);
     const [selectedLanguage, setSelectedLanguage] = useState<AudioTestLanguage>('th');
-    const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'fallback' | 'failed'>(isAudioEnabled ? 'success' : 'idle');
+    const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'fallback' | 'failed'>('idle');
+    const [selectedState, setSelectedState] = useState<{ dayKey: string; ids: Set<string> }>({
+        dayKey,
+        ids: new Set()
+    });
+    const selected = selectedState.dayKey === dayKey ? selectedState.ids : new Set<string>();
 
     useEffect(() => {
         syncPlaybackDay(dayKey);
     }, [dayKey, syncPlaybackDay]);
 
-    useEffect(() => {
-        if (isAudioEnabled && testStatus === 'idle') {
-            setTestStatus('success');
-        }
-    }, [isAudioEnabled, testStatus]);
-
     useScheduler(items, playedIds, markPlayed, isAudioEnabled, dayKey, serverTime);
-    const [selected, setSelected] = useState<Set<string>>(new Set());
+
+    const effectiveTestStatus = isAudioEnabled && testStatus === 'idle' ? 'success' : testStatus;
 
     const handleTestAudio = async () => {
         setTestStatus('testing');
@@ -43,16 +43,16 @@ export function Home() {
     let audioStatusText = 'กดทดสอบเสียง';
     let audioStatusClass = 'text-amber-400/80';
 
-    if (testStatus === 'testing') {
+    if (effectiveTestStatus === 'testing') {
         audioStatusText = 'กำลังทดสอบเสียง...';
         audioStatusClass = 'text-sky-300';
-    } else if (testStatus === 'success') {
+    } else if (effectiveTestStatus === 'success') {
         audioStatusText = 'ระบบเสียงพร้อมใช้งาน';
         audioStatusClass = 'text-green-400';
-    } else if (testStatus === 'fallback') {
+    } else if (effectiveTestStatus === 'fallback') {
         audioStatusText = 'ทดสอบด้วยเสียงแจ้งเตือนแทนข้อความ';
         audioStatusClass = 'text-amber-300';
-    } else if (testStatus === 'failed') {
+    } else if (effectiveTestStatus === 'failed') {
         audioStatusText = 'ทดสอบเสียงไม่สำเร็จ';
         audioStatusClass = 'text-red-400';
     }
@@ -81,12 +81,12 @@ export function Home() {
                                 <button
                                     type="button"
                                     onClick={handleTestAudio}
-                                    disabled={testStatus === 'testing'}
+                                    disabled={effectiveTestStatus === 'testing'}
                                     className="px-4 py-2 rounded-lg transition-colors bg-primary hover:bg-primary/90 disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold shadow-lg shadow-primary/20"
                                     title="Test alarm audio"
                                     aria-label="Test alarm audio"
                                 >
-                                    {testStatus === 'testing' ? 'กำลังทดสอบ...' : 'ทดสอบเสียง'}
+                                    {effectiveTestStatus === 'testing' ? 'กำลังทดสอบ...' : 'ทดสอบเสียง'}
                                 </button>
                                 <div className="flex items-center bg-bg-soft/60 border border-line rounded-lg p-1">
                                     {(['th', 'en'] as AudioTestLanguage[]).map((language) => (
@@ -107,7 +107,10 @@ export function Home() {
                             </div>
                         </div>
                         <div className="flex-1 overflow-auto">
-                            <AlarmList selected={selected} onSelect={setSelected} />
+                            <AlarmList
+                                selected={selected}
+                                onSelect={(ids) => setSelectedState({ dayKey, ids })}
+                            />
                         </div>
                         <Controls selected={selected} />
                     </div>

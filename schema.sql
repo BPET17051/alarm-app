@@ -1,10 +1,10 @@
 -- Create the alarms table if it doesn't exist
 CREATE TABLE IF NOT EXISTS alarms (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  day_key TEXT NOT NULL DEFAULT to_char((NOW() AT TIME ZONE 'Asia/Bangkok')::date, 'YYYY-MM-DD'),
   h INTEGER NOT NULL,
   m INTEGER NOT NULL,
   s INTEGER DEFAULT 0,
-  label TEXT,
   audio_id TEXT,
   audio_name TEXT,
   notify_status TEXT DEFAULT 'PENDING',

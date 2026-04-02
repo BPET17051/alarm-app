@@ -37,7 +37,7 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
     };
 
     const handleDuplicate = async (item: AlarmItem) => {
-        await addItem(item.h, item.m, item.s || 0, item.label || '', item.audioId, item.audioName);
+        await addItem(item.h, item.m, item.s || 0, item.audioId, item.audioName);
     };
 
     if (items.length === 0) {
@@ -74,7 +74,7 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                     />
                 </div>
                 <div className="w-28">Time</div>
-                <div className="flex-1">Label</div>
+                <div className="flex-1">Audio</div>
                 <div className="w-24 text-right">Status</div>
                 <div className="w-36 text-right">Actions</div>
             </div>
@@ -100,7 +100,7 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                             : 'bg-bg-soft/50 border-line hover:border-primary/50 hover:bg-bg-soft/80 hover:shadow-md'
                             }`}
                         role="listitem"
-                        aria-label={`Alarm at ${item.h}:${item.m}:${item.s} - ${item.label || item.audioName || 'No label'}`}
+                        aria-label={`Alarm at ${item.h}:${item.m}:${item.s} - ${item.audioName || 'Default alarm sound'}`}
                     >
                         <div className="flex items-center justify-between w-full md:w-auto">
                             <div className="flex items-center gap-3">
@@ -148,7 +148,7 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
 
                         <div className="flex-1 truncate px-0 md:px-3 w-full md:w-auto">
                             <div className="font-medium truncate text-fg">
-                                {item.label || <span className="text-muted/50 italic">No label</span>}
+                                {item.audioName || <span className="text-muted/50 italic">Default alarm sound</span>}
                             </div>
                             {item.audioName && (
                                 <div className="text-xs text-muted/60 truncate mt-0.5 flex items-center gap-1">

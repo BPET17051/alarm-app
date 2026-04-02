@@ -1,6 +1,6 @@
 export type AudioTestLanguage = 'th' | 'en';
 
-export type AudioTestMode = 'tts' | 'beep';
+export type AudioTestMode = 'asset' | 'tts' | 'beep';
 
 export interface AudioTestResult {
     mode: AudioTestMode;
@@ -15,6 +15,11 @@ const TEST_MESSAGES: Record<AudioTestLanguage, { text: string; lang: string }> =
         text: 'The public address system audio test is now in progress.',
         lang: 'en-US'
     }
+};
+
+const TEST_AUDIO_ASSETS: Partial<Record<AudioTestLanguage, string>> = {
+    th: import.meta.env.VITE_TEST_AUDIO_TH_URL,
+    en: import.meta.env.VITE_TEST_AUDIO_EN_URL
 };
 
 export async function unlockBrowserAudio(): Promise<void> {
@@ -80,28 +85,99 @@ export async function playFallbackBeep(): Promise<void> {
     });
 }
 
+async function waitForVoices(): Promise<SpeechSynthesisVoice[]> {
+    const synth = window.speechSynthesis;
+    const voices = synth.getVoices();
+    if (voices.length > 0) {
+        return voices;
+    }
+
+    return new Promise<SpeechSynthesisVoice[]>((resolve) => {
+        const handleVoicesChanged = () => {
+            window.clearTimeout(timeoutId);
+            synth.removeEventListener('voiceschanged', handleVoicesChanged);
+            resolve(synth.getVoices());
+        };
+
+        const timeoutId = window.setTimeout(() => {
+            synth.removeEventListener('voiceschanged', handleVoicesChanged);
+            resolve(synth.getVoices());
+        }, 1200);
+
+        synth.addEventListener('voiceschanged', handleVoicesChanged);
+    });
+}
+
+function findVoiceForLanguage(voices: SpeechSynthesisVoice[], language: AudioTestLanguage) {
+    const langPrefix = language === 'th' ? 'th' : 'en';
+    const exactLang = language === 'th' ? 'th-th' : 'en-us';
+
+    return voices.find((voice) => voice.lang.toLowerCase() === exactLang)
+        || voices.find((voice) => voice.lang.toLowerCase().startsWith(`${langPrefix}-`))
+        || voices.find((voice) => voice.lang.toLowerCase().startsWith(langPrefix));
+}
+
+async function playRecordedAnnouncement(url: string): Promise<void> {
+    await new Promise<void>((resolve, reject) => {
+        const audio = new Audio(url);
+        audio.preload = 'auto';
+        audio.onended = () => resolve();
+        audio.onerror = () => reject(new Error(`Failed to play audio asset: ${url}`));
+        const playPromise = audio.play();
+        if (playPromise !== undefined) {
+            playPromise.catch(reject);
+        }
+    });
+}
+
+async function speakAnnouncement(language: AudioTestLanguage, message: { text: string; lang: string }): Promise<boolean> {
+    if (!('speechSynthesis' in window)) {
+        return false;
+    }
+
+    const voices = await waitForVoices();
+    const selectedVoice = findVoiceForLanguage(voices, language);
+
+    if (!selectedVoice) {
+        return false;
+    }
+
+    await new Promise<void>((resolve, reject) => {
+        const utterance = new SpeechSynthesisUtterance(message.text);
+        utterance.lang = selectedVoice.lang || message.lang;
+        utterance.voice = selectedVoice;
+        utterance.rate = 1;
+        utterance.pitch = 1;
+        utterance.volume = 1;
+        utterance.onend = () => resolve();
+        utterance.onerror = () => reject(new Error('Speech synthesis failed'));
+        window.speechSynthesis.cancel();
+        window.speechSynthesis.speak(utterance);
+    });
+
+    return true;
+}
+
 export async function playTestAnnouncement(language: AudioTestLanguage): Promise<AudioTestResult> {
     const message = TEST_MESSAGES[language];
+    const testAssetUrl = TEST_AUDIO_ASSETS[language];
 
-    if ('speechSynthesis' in window) {
+    if (testAssetUrl) {
         try {
-            await new Promise<void>((resolve, reject) => {
-                const utterance = new SpeechSynthesisUtterance(message.text);
-                utterance.lang = message.lang;
-                utterance.rate = 1;
-                utterance.pitch = 1;
-                utterance.volume = 1;
-                utterance.onend = () => resolve();
-                utterance.onerror = () => reject(new Error('Speech synthesis failed'));
-                window.speechSynthesis.cancel();
-                window.speechSynthesis.speak(utterance);
-            });
-
-            return { mode: 'tts' };
-        } catch {
-            await playFallbackBeep();
-            return { mode: 'beep' };
+            await playRecordedAnnouncement(testAssetUrl);
+            return { mode: 'asset' };
+        } catch (error) {
+            console.warn('Configured test audio asset failed, falling back to TTS/beep', error);
         }
+    }
+
+    try {
+        const spoke = await speakAnnouncement(language, message);
+        if (spoke) {
+            return { mode: 'tts' };
+        }
+    } catch {
+        // Fall through to beep.
     }
 
     await playFallbackBeep();

@@ -3,13 +3,13 @@ import { useAlarms } from '../hooks/useAlarms';
 import * as API from '../services/api';
 import { AudioSelectionModal } from './AudioSelectionModal';
 import type { AudioSelection } from './AudioSelectionModal';
+import { normalizeTime } from '../utils/time';
 
 export function AlarmForm() {
     const { addItem } = useAlarms();
     const [h, setH] = useState(new Date().getHours());
     const [m, setM] = useState(new Date().getMinutes());
     const [s, setS] = useState(0);
-    const [label, setLabel] = useState('');
 
     // Audio selection state
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -20,8 +20,6 @@ export function AlarmForm() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-
-        if (h < 0 || h > 23 || m < 0 || m > 59 || s < 0 || s > 59) return;
 
         setIsSubmitting(true);
 
@@ -42,14 +40,15 @@ export function AlarmForm() {
                 audioName = audioSelection.name;
             }
 
-            await addItem(h, m, s, label, audioId, audioName);
+            const nextTime = normalizeTime(h, m, s);
+
+            await addItem(nextTime.h, nextTime.m, nextTime.s, audioId, audioName);
 
             // Show success feedback
             setShowSuccess(true);
             setTimeout(() => setShowSuccess(false), 2000);
 
             // Reset form
-            setLabel('');
             setAudioSelection(null);
 
         } catch (e: unknown) {
@@ -62,6 +61,20 @@ export function AlarmForm() {
     };
 
     const isValid = !isNaN(h) && !isNaN(m) && !isNaN(s);
+
+    const handleTimeChange = (part: 'h' | 'm' | 's', rawValue: string) => {
+        const parsed = Number.parseInt(rawValue, 10);
+        const nextValue = Number.isNaN(parsed) ? 0 : parsed;
+        const nextTime = normalizeTime(
+            part === 'h' ? nextValue : h,
+            part === 'm' ? nextValue : m,
+            part === 's' ? nextValue : s
+        );
+
+        setH(nextTime.h);
+        setM(nextTime.m);
+        setS(nextTime.s);
+    };
 
     const getSelectionDisplay = () => {
         if (!audioSelection) return 'Default Alarm Sound';
@@ -85,7 +98,7 @@ export function AlarmForm() {
                                 <label htmlFor="hours" className="text-xs font-semibold text-muted/70 mb-1 text-center uppercase tracking-wide">Hours</label>
                                 <input
                                     id="hours" type="number" min="0" max="23" value={h}
-                                    onChange={e => setH(parseInt(e.target.value) || 0)}
+                                    onChange={e => handleTimeChange('h', e.target.value)}
                                     className="w-full bg-bg border border-line rounded-lg p-3 text-center text-2xl font-bold focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all"
                                 />
                             </div>
@@ -93,7 +106,7 @@ export function AlarmForm() {
                                 <label htmlFor="minutes" className="text-xs font-semibold text-muted/70 mb-1 text-center uppercase tracking-wide">Minutes</label>
                                 <input
                                     id="minutes" type="number" min="0" max="59" value={m}
-                                    onChange={e => setM(parseInt(e.target.value) || 0)}
+                                    onChange={e => handleTimeChange('m', e.target.value)}
                                     className="w-full bg-bg border border-line rounded-lg p-3 text-center text-2xl font-bold focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all"
                                 />
                             </div>
@@ -101,7 +114,7 @@ export function AlarmForm() {
                                 <label htmlFor="seconds" className="text-xs font-semibold text-muted/70 mb-1 text-center uppercase tracking-wide">Seconds</label>
                                 <input
                                     id="seconds" type="number" min="0" max="59" value={s}
-                                    onChange={e => setS(parseInt(e.target.value) || 0)}
+                                    onChange={e => handleTimeChange('s', e.target.value)}
                                     className="w-full bg-bg border border-line rounded-lg p-3 text-center text-2xl font-bold focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all"
                                 />
                             </div>
@@ -140,21 +153,6 @@ export function AlarmForm() {
                             </svg>
                         </div>
                     </div>
-                </div>
-
-                {/* Label Input */}
-                <div>
-                    <label htmlFor="alarm-label" className="block text-sm font-bold text-muted mb-2 uppercase tracking-wider">
-                        Label <span className="text-muted/50 font-normal">(Optional)</span>
-                    </label>
-                    <input
-                        id="alarm-label"
-                        type="text"
-                        placeholder="e.g., Meeting, Wake up, Break time..."
-                        className="w-full bg-bg-soft border border-line rounded-xl p-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
-                        value={label}
-                        onChange={e => setLabel(e.target.value)}
-                    />
                 </div>
 
                 {/* Submit Button */}
