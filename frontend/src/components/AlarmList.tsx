@@ -18,7 +18,7 @@ function AlarmTime({ item, mobile = false }: { item: AlarmItem; mobile?: boolean
             : 'text-fg';
 
     return (
-        <div className={`${mobile ? 'text-2xl' : 'text-xl'} font-bold tabular-nums transition-colors ${colorClass}`}>
+        <div className={`${mobile ? 'text-2xl' : 'text-lg'} font-bold tabular-nums transition-colors ${colorClass}`}>
             <span className="inline-block min-w-[2ch] text-right">{item.h.toString().padStart(2, '0')}</span>
             <span className="text-muted/50 mx-0.5">:</span>
             <span className="inline-block min-w-[2ch] text-right">{item.m.toString().padStart(2, '0')}</span>
@@ -185,7 +185,7 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                         title={selected.size === items.length ? 'Deselect all' : 'Select all'}
                     />
                 </div>
-                <div className="w-28">Time</div>
+                <div className="w-24">Time</div>
                 <div className="flex-1 min-w-0">Audio</div>
                 <div className="w-24 text-right">Status</div>
                 <div className="w-40 text-right">Actions</div>
@@ -227,11 +227,11 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                                         aria-label={`Select alarm at ${item.h}:${item.m}:${item.s}`}
                                     />
                                 </div>
-                                <div className="w-28 shrink-0">
+                                <div className="w-24 shrink-0">
                                     <AlarmTime item={item} />
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                    <div className="font-bold text-2xl leading-tight text-fg truncate" title={audioDisplay}>
+                                    <div className="font-bold text-xl leading-tight text-fg truncate" title={audioDisplay}>
                                         {audioDisplay}
                                     </div>
                                 </div>
