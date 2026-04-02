@@ -108,7 +108,7 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
         setOpenMenuId(null);
     };
 
-    const renderActions = (item: AlarmItem, mobile = false) => (
+    const renderActions = (item: AlarmItem, mobile = false, desktopMenuDirection: 'up' | 'down' = 'down') => (
         <div className={`relative flex items-center justify-end gap-1.5 ${mobile ? 'w-full' : openMenuId === item.id ? 'opacity-100' : 'opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity'}`}>
             {item.audioId && (
                 <button
@@ -141,7 +141,13 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                 </svg>
             </button>
             {openMenuId === item.id && (
-                <div className={`absolute ${mobile ? 'right-4 bottom-14' : 'right-4 top-12'} z-20 min-w-[150px] rounded-xl border border-line bg-card shadow-xl p-1`}>
+                <div className={`absolute ${
+                    mobile
+                        ? 'right-4 bottom-14'
+                        : desktopMenuDirection === 'up'
+                            ? 'right-4 bottom-12'
+                            : 'right-4 top-12'
+                } z-20 min-w-[150px] rounded-xl border border-line bg-card shadow-xl p-1`}>
                     <button
                         onClick={() => handleDuplicate(item)}
                         className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-bg-soft"
@@ -223,9 +229,11 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
             </div>
 
             <div className="max-h-[400px] overflow-y-auto space-y-3 pr-2 custom-scrollbar">
-                {items.map(item => {
+                {items.map((item, index) => {
                     const audioDisplay = formatAudioName(item.audioDisplayName);
                     const theme = getAlarmThemeClasses(audioDisplay);
+                    const desktopMenuDirection: 'up' | 'down' =
+                        items.length <= 2 || index >= items.length - 2 ? 'up' : 'down';
 
                     return (
                         <div
@@ -264,7 +272,7 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                                     <AlarmStatus item={item} />
                                 </div>
                                 <div className="w-24 shrink-0 relative">
-                                    {renderActions(item)}
+                                    {renderActions(item, false, desktopMenuDirection)}
                                 </div>
                             </div>
 
