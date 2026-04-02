@@ -109,7 +109,7 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
     };
 
     const renderActions = (item: AlarmItem, mobile = false) => (
-        <div className={`relative flex items-center justify-end gap-1.5 ${mobile ? 'w-full' : 'opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity'}`}>
+        <div className={`relative flex items-center justify-end gap-1.5 ${mobile ? 'w-full' : openMenuId === item.id ? 'opacity-100' : 'opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity'}`}>
             {item.audioId && (
                 <button
                     onClick={() => handlePlay(item)}
