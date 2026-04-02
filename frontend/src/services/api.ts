@@ -2,10 +2,40 @@ import type { AlarmItem, AudioFile } from '../types';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
 
+type AlarmApiResponse = AlarmItem & {
+    audioName?: string | null;
+    audioDisplayName?: string | null;
+};
+
+type AudioFileApiResponse = AudioFile & {
+    name?: string | null;
+    displayName?: string | null;
+    fileName?: string | null;
+};
+
+function normalizeAlarm(item: AlarmApiResponse): AlarmItem {
+    return {
+        ...item,
+        audioDisplayName: item.audioDisplayName ?? item.audioName ?? '',
+    };
+}
+
+function normalizeAudioFile(file: AudioFileApiResponse): AudioFile {
+    const displayName = file.displayName ?? file.name ?? file.fileName ?? file.id;
+    const fileName = file.fileName ?? file.name ?? file.displayName ?? file.id;
+
+    return {
+        ...file,
+        displayName,
+        fileName,
+    };
+}
+
 export async function getAlarms(): Promise<AlarmItem[]> {
     const res = await fetch(`${API_URL}/alarms`);
     if (!res.ok) throw new Error('Failed to fetch alarms');
-    return res.json();
+    const data: AlarmApiResponse[] = await res.json();
+    return data.map(normalizeAlarm);
 }
 
 export async function createAlarm(alarm: Omit<AlarmItem, 'id' | 'notify_status'>): Promise<AlarmItem> {
@@ -15,7 +45,8 @@ export async function createAlarm(alarm: Omit<AlarmItem, 'id' | 'notify_status'>
         body: JSON.stringify(alarm),
     });
     if (!res.ok) throw new Error('Failed to create alarm');
-    return res.json();
+    const data: AlarmApiResponse = await res.json();
+    return normalizeAlarm(data);
 }
 
 export async function updateAlarm(id: string, updates: Partial<AlarmItem>): Promise<AlarmItem> {
@@ -25,7 +56,8 @@ export async function updateAlarm(id: string, updates: Partial<AlarmItem>): Prom
         body: JSON.stringify(updates),
     });
     if (!res.ok) throw new Error('Failed to update alarm');
-    return res.json();
+    const data: AlarmApiResponse = await res.json();
+    return normalizeAlarm(data);
 }
 
 export async function deleteAlarm(id: string): Promise<void> {
@@ -41,7 +73,8 @@ export async function clearAlarms(): Promise<void> {
 export async function getAudioFiles(): Promise<AudioFile[]> {
     const res = await fetch(`${API_URL}/audio`);
     if (!res.ok) throw new Error('Failed to fetch audio files');
-    return res.json();
+    const data: AudioFileApiResponse[] = await res.json();
+    return data.map(normalizeAudioFile);
 }
 
 export async function uploadAudio(file: File, displayName?: string): Promise<AudioFile> {
@@ -76,7 +109,8 @@ export async function uploadAudio(file: File, displayName?: string): Promise<Aud
 
         throw new Error(errorMsg);
     }
-    return res.json();
+    const data: AudioFileApiResponse = await res.json();
+    return normalizeAudioFile(data);
 }
 
 export async function deleteAudio(audioId: string): Promise<void> {
@@ -97,7 +131,10 @@ export async function getTemplates(): Promise<Template[]> {
     const res = await fetch(`${API_URL}/templates`);
     if (!res.ok) throw new Error('Failed to fetch templates');
     const data = await res.json();
-    return data.templates;
+    return data.templates.map((template: Template & { items: AlarmApiResponse[] }) => ({
+        ...template,
+        items: template.items.map(normalizeAlarm),
+    }));
 }
 
 export async function saveTemplate(name: string, items: AlarmItem[]): Promise<void> {
