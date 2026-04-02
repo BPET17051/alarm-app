@@ -179,7 +179,6 @@ export function AudioSelectionModal({
                                                 </svg>
                                                 <div className="min-w-0">
                                                     <div className="truncate font-semibold">{audio.displayName}</div>
-                                                    <div className="truncate text-xs text-muted/60">{audio.fileName}</div>
                                                 </div>
                                             </div>
                                             <div className="flex items-center gap-2">

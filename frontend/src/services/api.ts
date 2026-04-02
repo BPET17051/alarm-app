@@ -74,7 +74,9 @@ export async function getAudioFiles(): Promise<AudioFile[]> {
     const res = await fetch(`${API_URL}/audio`);
     if (!res.ok) throw new Error('Failed to fetch audio files');
     const data: AudioFileApiResponse[] = await res.json();
-    return data.map(normalizeAudioFile);
+    return data
+        .map(normalizeAudioFile)
+        .filter((file) => file.id !== '.emptyFolderPlaceholder');
 }
 
 export async function uploadAudio(file: File, displayName?: string): Promise<AudioFile> {

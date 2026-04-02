@@ -1,7 +1,8 @@
 const AUDIO_EXTENSION_PATTERN = /\.(mp3|wav|ogg|aac|m4a|flac)$/i;
+// eslint-disable-next-line no-control-regex
 const CONTROL_CHAR_PATTERN = /[\u0000-\u001F\u007F-\u009F]/g;
-const ZERO_WIDTH_CHAR_PATTERN = /[\u200B-\u200D\uFEFF]/g;
-const REPLACEMENT_CHAR_PATTERN = /\uFFFD/g;
+const ZERO_WIDTH_CHAR_PATTERN = new RegExp('[\\u200B-\\u200D\\uFEFF]', 'g');
+const REPLACEMENT_CHAR_PATTERN = new RegExp('\\uFFFD', 'g');
 
 export const AUDIO_DISPLAY_NAME_MAX_LENGTH = 40;
 
