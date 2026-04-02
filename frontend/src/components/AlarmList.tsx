@@ -9,6 +9,50 @@ interface AlarmListProps {
     onSelect: (selected: Set<string>) => void;
 }
 
+function AlarmTime({ item, mobile = false }: { item: AlarmItem; mobile?: boolean }) {
+    const colorClass = item.notify_status === 'SENT'
+        ? 'text-green-400'
+        : item.notify_status === 'FAILED'
+            ? 'text-danger'
+            : 'text-fg';
+
+    return (
+        <div className={`${mobile ? 'text-2xl' : 'text-2xl'} font-bold tabular-nums transition-colors ${colorClass}`}>
+            <span className="inline-block min-w-[2ch] text-right">{item.h.toString().padStart(2, '0')}</span>
+            <span className="text-muted/50 mx-0.5">:</span>
+            <span className="inline-block min-w-[2ch] text-right">{item.m.toString().padStart(2, '0')}</span>
+            <span className="text-muted/50 mx-0.5">:</span>
+            <span className="inline-block min-w-[2ch] text-right">{item.s?.toString().padStart(2, '0') || '00'}</span>
+        </div>
+    );
+}
+
+function AlarmStatus({ item, mobile = false }: { item: AlarmItem; mobile?: boolean }) {
+    if (item.notify_status === 'PENDING') {
+        return null;
+    }
+
+    const badgeClass = item.notify_status === 'SENT'
+        ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+        : 'bg-danger/20 text-danger border border-danger/30';
+
+    return (
+        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-bold uppercase tracking-wider ${badgeClass}`}>
+            {!mobile && item.notify_status === 'SENT' && (
+                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"></path>
+                </svg>
+            )}
+            {!mobile && item.notify_status === 'FAILED' && (
+                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd"></path>
+                </svg>
+            )}
+            {item.notify_status}
+        </span>
+    );
+}
+
 export function AlarmList({ selected, onSelect }: AlarmListProps) {
     const { items, removeItem, updateItem, addItem } = useAlarms();
     const [editingAlarm, setEditingAlarm] = useState<AlarmItem | null>(null);
@@ -49,6 +93,53 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
     const handleDuplicate = async (item: AlarmItem) => {
         await addItem(item.h, item.m, item.s || 0, item.audioId, item.audioName);
     };
+
+    const renderActions = (item: AlarmItem, mobile = false) => (
+        <div className={`flex items-center justify-end gap-1.5 ${mobile ? 'w-full' : 'opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity'}`}>
+            {item.audioId && (
+                <button
+                    onClick={() => handlePlay(item)}
+                    className={`${mobile ? 'p-3' : 'p-2'} hover:bg-primary/20 rounded-lg text-primary transition-all hover:scale-110`}
+                    title="Play audio preview"
+                    aria-label="Play audio preview"
+                >
+                    <svg className={`${mobile ? 'w-5 h-5' : 'w-4 h-4'}`} fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd"></path>
+                    </svg>
+                </button>
+            )}
+            <button
+                onClick={() => handleDuplicate(item)}
+                className={`${mobile ? 'p-3' : 'p-2'} hover:bg-primary/20 rounded-lg text-primary transition-all hover:scale-110`}
+                title="Duplicate alarm"
+                aria-label="Duplicate alarm"
+            >
+                <svg className={`${mobile ? 'w-5 h-5' : 'w-4 h-4'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                </svg>
+            </button>
+            <button
+                onClick={() => setEditingAlarm(item)}
+                className={`${mobile ? 'p-3' : 'p-2'} hover:bg-primary/20 rounded-lg text-primary transition-all hover:scale-110`}
+                title="Edit alarm"
+                aria-label="Edit alarm"
+            >
+                <svg className={`${mobile ? 'w-5 h-5' : 'w-4 h-4'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                </svg>
+            </button>
+            <button
+                onClick={() => removeItem(item.id)}
+                className={`${mobile ? 'p-3' : 'p-2'} hover:bg-danger/20 rounded-lg text-danger transition-all hover:scale-110`}
+                title="Delete alarm"
+                aria-label="Delete alarm"
+            >
+                <svg className={`${mobile ? 'w-5 h-5' : 'w-4 h-4'}`} fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd"></path>
+                </svg>
+            </button>
+        </div>
+    );
 
     if (items.length === 0) {
         return (
@@ -108,16 +199,15 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                     return (
                         <div
                             key={item.id}
-                            className={`group flex flex-col p-4 rounded-xl border transition-all duration-200 gap-3 md:grid md:grid-cols-[44px_140px_minmax(0,1fr)_96px_164px] md:items-center md:gap-4 ${selected.has(item.id)
+                            className={`group rounded-xl border transition-all duration-200 ${selected.has(item.id)
                                 ? 'bg-primary/10 border-primary shadow-lg shadow-primary/10'
                                 : 'bg-bg-soft/50 border-line hover:border-primary/50 hover:bg-bg-soft/80 hover:shadow-md'
                                 }`}
                             role="listitem"
                             aria-label={`Alarm at ${item.h}:${item.m}:${item.s} - ${item.audioName || 'Default alarm sound'}`}
                         >
-                        <div className="flex items-center justify-between w-full md:contents">
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 flex items-center justify-center md:hidden">
+                            <div className="hidden md:grid grid-cols-[44px_140px_minmax(0,1fr)_96px_164px] items-center gap-4 p-4">
+                                <div className="flex items-center justify-center">
                                     <input
                                         type="checkbox"
                                         checked={selected.has(item.id)}
@@ -126,122 +216,45 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                                         aria-label={`Select alarm at ${item.h}:${item.m}:${item.s}`}
                                     />
                                 </div>
-                                <div className="hidden md:flex items-center justify-center">
-                                    <input
-                                        type="checkbox"
-                                        checked={selected.has(item.id)}
-                                        onChange={() => toggleSelect(item.id)}
-                                        className="rounded border-line bg-bg-soft text-primary focus:ring-2 focus:ring-primary cursor-pointer"
-                                        aria-label={`Select alarm at ${item.h}:${item.m}:${item.s}`}
-                                    />
+                                <AlarmTime item={item} />
+                                <div className="min-w-0">
+                                    <div className="font-bold text-xl leading-tight text-fg truncate" title={audioDisplay}>
+                                        {audioDisplay}
+                                    </div>
+                                </div>
+                                <div className="text-right">
+                                    <AlarmStatus item={item} />
+                                </div>
+                                <div className="text-right">
+                                    {renderActions(item)}
                                 </div>
                             </div>
 
-                            <div className="md:hidden">
-                                {item.notify_status !== 'PENDING' && (
-                                    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-bold uppercase tracking-wider ${item.notify_status === 'SENT'
-                                        ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-                                        : 'bg-danger/20 text-danger border border-danger/30'
-                                        }`}>
-                                        {item.notify_status}
-                                    </span>
-                                )}
+                            <div className="md:hidden p-4 space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 flex items-center justify-center">
+                                            <input
+                                                type="checkbox"
+                                                checked={selected.has(item.id)}
+                                                onChange={() => toggleSelect(item.id)}
+                                                className="rounded border-line bg-bg-soft text-primary focus:ring-2 focus:ring-primary cursor-pointer"
+                                                aria-label={`Select alarm at ${item.h}:${item.m}:${item.s}`}
+                                            />
+                                        </div>
+                                        <AlarmTime item={item} mobile />
+                                    </div>
+                                    <div>
+                                        <AlarmStatus item={item} mobile />
+                                    </div>
+                                </div>
+                                <div className="pl-[3.25rem] min-w-0">
+                                    <div className="font-bold text-base leading-tight text-fg truncate" title={audioDisplay}>
+                                        {audioDisplay}
+                                    </div>
+                                </div>
+                                {renderActions(item, true)}
                             </div>
-                        </div>
-
-                        <div className={`hidden md:block text-2xl font-bold tabular-nums transition-colors ${item.notify_status === 'SENT' ? 'text-green-400' :
-                            item.notify_status === 'FAILED' ? 'text-danger' : 'text-fg'
-                            }`}>
-                            <span className="inline-block min-w-[2ch] text-right">{item.h.toString().padStart(2, '0')}</span>
-                            <span className="text-muted/50 mx-0.5">:</span>
-                            <span className="inline-block min-w-[2ch] text-right">{item.m.toString().padStart(2, '0')}</span>
-                            <span className="text-muted/50 mx-0.5">:</span>
-                            <span className="inline-block min-w-[2ch] text-right">{item.s?.toString().padStart(2, '0') || '00'}</span>
-                        </div>
-
-                        <div className="md:hidden text-2xl font-bold tabular-nums transition-colors text-fg pl-[3.25rem]">
-                            <span className="inline-block min-w-[2ch] text-right">{item.h.toString().padStart(2, '0')}</span>
-                            <span className="text-muted/50 mx-0.5">:</span>
-                            <span className="inline-block min-w-[2ch] text-right">{item.m.toString().padStart(2, '0')}</span>
-                            <span className="text-muted/50 mx-0.5">:</span>
-                            <span className="inline-block min-w-[2ch] text-right">{item.s?.toString().padStart(2, '0') || '00'}</span>
-                        </div>
-
-                        <div className="min-w-0 w-full">
-                            <div
-                                className="font-bold text-base md:text-xl leading-tight text-fg truncate"
-                                title={audioDisplay}
-                            >
-                                {audioDisplay}
-                            </div>
-                        </div>
-
-                        <div className="flex items-center justify-between md:justify-end w-full gap-4">
-                            <div className="hidden md:block text-right">
-                                {item.notify_status !== 'PENDING' && (
-                                    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-bold uppercase tracking-wider ${item.notify_status === 'SENT'
-                                        ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-                                        : 'bg-danger/20 text-danger border border-danger/30'
-                                        }`}>
-                                        {item.notify_status === 'SENT' ? (
-                                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"></path>
-                                            </svg>
-                                        ) : (
-                                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd"></path>
-                                            </svg>
-                                        )}
-                                        {item.notify_status}
-                                    </span>
-                                )}
-                            </div>
-
-                            <div className="flex items-center justify-end gap-1.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity w-full md:w-auto">
-                                {item.audioId && (
-                                    <button
-                                        onClick={() => handlePlay(item)}
-                                        className="p-3 md:p-2 hover:bg-primary/20 rounded-lg text-primary transition-all hover:scale-110"
-                                        title="Play audio preview"
-                                        aria-label="Play audio preview"
-                                    >
-                                        <svg className="w-5 h-5 md:w-4 md:h-4" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd"></path>
-                                        </svg>
-                                    </button>
-                                )}
-                                <button
-                                    onClick={() => handleDuplicate(item)}
-                                    className="p-3 md:p-2 hover:bg-primary/20 rounded-lg text-primary transition-all hover:scale-110"
-                                    title="Duplicate alarm"
-                                    aria-label="Duplicate alarm"
-                                >
-                                    <svg className="w-5 h-5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
-                                    </svg>
-                                </button>
-                                <button
-                                    onClick={() => setEditingAlarm(item)}
-                                    className="p-3 md:p-2 hover:bg-primary/20 rounded-lg text-primary transition-all hover:scale-110"
-                                    title="Edit alarm"
-                                    aria-label="Edit alarm"
-                                >
-                                    <svg className="w-5 h-5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
-                                    </svg>
-                                </button>
-                                <button
-                                    onClick={() => removeItem(item.id)}
-                                    className="p-3 md:p-2 hover:bg-danger/20 rounded-lg text-danger transition-all hover:scale-110"
-                                    title="Delete alarm"
-                                    aria-label="Delete alarm"
-                                >
-                                    <svg className="w-5 h-5 md:w-4 md:h-4" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd"></path>
-                                    </svg>
-                                </button>
-                            </div>
-                        </div>
                         </div>
                     );
                 })}
