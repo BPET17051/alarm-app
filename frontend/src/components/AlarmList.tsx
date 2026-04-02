@@ -72,8 +72,8 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
 
     return (
         <div className="space-y-3">
-            <div className="hidden md:flex sticky top-0 bg-card/95 backdrop-blur-sm z-10 items-center justify-between px-4 py-3 text-xs font-bold text-muted/70 uppercase tracking-wider border-b border-line/50">
-                <div className="w-10 flex items-center justify-center">
+            <div className="hidden md:grid sticky top-0 bg-card/95 backdrop-blur-sm z-10 grid-cols-[44px_140px_minmax(0,1fr)_96px_164px] items-center gap-4 px-4 py-3 text-xs font-bold text-muted/70 uppercase tracking-wider border-b border-line/50">
+                <div className="flex items-center justify-center">
                     <input
                         type="checkbox"
                         checked={selected.size === items.length && items.length > 0}
@@ -83,10 +83,10 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                         title={selected.size === items.length ? 'Deselect all' : 'Select all'}
                     />
                 </div>
-                <div className="w-28">Time</div>
-                <div className="flex-1">Audio</div>
-                <div className="w-24 text-right">Status</div>
-                <div className="w-36 text-right">Actions</div>
+                <div>Time</div>
+                <div>Audio</div>
+                <div className="text-right">Status</div>
+                <div className="text-right">Actions</div>
             </div>
 
             <div className="md:hidden flex items-center justify-between px-4 py-2 mb-2">
@@ -108,14 +108,14 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                     return (
                         <div
                             key={item.id}
-                            className={`group flex flex-col md:flex-row md:items-center justify-between p-4 rounded-xl border transition-all duration-200 gap-3 md:gap-0 ${selected.has(item.id)
+                            className={`group flex flex-col p-4 rounded-xl border transition-all duration-200 gap-3 md:grid md:grid-cols-[44px_140px_minmax(0,1fr)_96px_164px] md:items-center md:gap-4 ${selected.has(item.id)
                                 ? 'bg-primary/10 border-primary shadow-lg shadow-primary/10'
                                 : 'bg-bg-soft/50 border-line hover:border-primary/50 hover:bg-bg-soft/80 hover:shadow-md'
                                 }`}
                             role="listitem"
                             aria-label={`Alarm at ${item.h}:${item.m}:${item.s} - ${item.audioName || 'Default alarm sound'}`}
                         >
-                        <div className="flex items-center justify-between w-full md:w-auto">
+                        <div className="flex items-center justify-between w-full md:contents">
                             <div className="flex items-center gap-3">
                                 <div className="w-10 flex items-center justify-center md:hidden">
                                     <input
@@ -126,7 +126,7 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                                         aria-label={`Select alarm at ${item.h}:${item.m}:${item.s}`}
                                     />
                                 </div>
-                                <div className="hidden md:flex w-10 items-center justify-center">
+                                <div className="hidden md:flex items-center justify-center">
                                     <input
                                         type="checkbox"
                                         checked={selected.has(item.id)}
@@ -134,16 +134,6 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                                         className="rounded border-line bg-bg-soft text-primary focus:ring-2 focus:ring-primary cursor-pointer"
                                         aria-label={`Select alarm at ${item.h}:${item.m}:${item.s}`}
                                     />
-                                </div>
-
-                                <div className={`text-2xl font-bold tabular-nums transition-colors ${item.notify_status === 'SENT' ? 'text-green-400' :
-                                    item.notify_status === 'FAILED' ? 'text-danger' : 'text-fg'
-                                    }`}>
-                                    <span className="inline-block min-w-[2ch] text-right">{item.h.toString().padStart(2, '0')}</span>
-                                    <span className="text-muted/50 mx-0.5">:</span>
-                                    <span className="inline-block min-w-[2ch] text-right">{item.m.toString().padStart(2, '0')}</span>
-                                    <span className="text-muted/50 mx-0.5">:</span>
-                                    <span className="inline-block min-w-[2ch] text-right">{item.s?.toString().padStart(2, '0') || '00'}</span>
                                 </div>
                             </div>
 
@@ -159,17 +149,35 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                             </div>
                         </div>
 
-                        <div className="flex-1 min-w-0 px-0 md:px-4 w-full md:w-auto">
+                        <div className={`hidden md:block text-2xl font-bold tabular-nums transition-colors ${item.notify_status === 'SENT' ? 'text-green-400' :
+                            item.notify_status === 'FAILED' ? 'text-danger' : 'text-fg'
+                            }`}>
+                            <span className="inline-block min-w-[2ch] text-right">{item.h.toString().padStart(2, '0')}</span>
+                            <span className="text-muted/50 mx-0.5">:</span>
+                            <span className="inline-block min-w-[2ch] text-right">{item.m.toString().padStart(2, '0')}</span>
+                            <span className="text-muted/50 mx-0.5">:</span>
+                            <span className="inline-block min-w-[2ch] text-right">{item.s?.toString().padStart(2, '0') || '00'}</span>
+                        </div>
+
+                        <div className="md:hidden text-2xl font-bold tabular-nums transition-colors text-fg pl-[3.25rem]">
+                            <span className="inline-block min-w-[2ch] text-right">{item.h.toString().padStart(2, '0')}</span>
+                            <span className="text-muted/50 mx-0.5">:</span>
+                            <span className="inline-block min-w-[2ch] text-right">{item.m.toString().padStart(2, '0')}</span>
+                            <span className="text-muted/50 mx-0.5">:</span>
+                            <span className="inline-block min-w-[2ch] text-right">{item.s?.toString().padStart(2, '0') || '00'}</span>
+                        </div>
+
+                        <div className="min-w-0 w-full">
                             <div
-                                className="font-bold text-base md:text-lg leading-snug text-fg break-words whitespace-normal"
+                                className="font-bold text-base md:text-xl leading-tight text-fg truncate"
                                 title={audioDisplay}
                             >
                                 {audioDisplay}
                             </div>
                         </div>
 
-                        <div className="flex items-center justify-between md:justify-end w-full md:w-auto gap-4 md:flex-shrink-0">
-                            <div className="hidden md:block w-24 text-right flex-shrink-0">
+                        <div className="flex items-center justify-between md:justify-end w-full gap-4">
+                            <div className="hidden md:block text-right">
                                 {item.notify_status !== 'PENDING' && (
                                     <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-bold uppercase tracking-wider ${item.notify_status === 'SENT'
                                         ? 'bg-green-500/20 text-green-400 border border-green-500/30'
@@ -189,7 +197,7 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                                 )}
                             </div>
 
-                            <div className="flex items-center justify-end gap-1.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity w-full md:w-36 md:flex-shrink-0">
+                            <div className="flex items-center justify-end gap-1.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity w-full md:w-auto">
                                 {item.audioId && (
                                     <button
                                         onClick={() => handlePlay(item)}
