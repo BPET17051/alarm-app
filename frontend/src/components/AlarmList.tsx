@@ -10,6 +10,34 @@ interface AlarmListProps {
     onSelect: (selected: Set<string>) => void;
 }
 
+function getAlarmThemeClasses(audioDisplayName: string) {
+    const normalized = audioDisplayName.toLowerCase();
+
+    if (normalized.includes('พัก')) {
+        return {
+            base: 'bg-orange-500/10 border-orange-400/30 hover:bg-orange-500/16 hover:border-orange-300/50',
+            selected: 'bg-orange-500/18 border-orange-300 shadow-lg shadow-orange-500/10',
+        };
+    }
+
+    if (
+        normalized.includes('อีก10นาที')
+        || normalized.includes('อีก 10 นาที')
+        || normalized.includes('หมดเวลา')
+        || normalized.includes('หมดเวลาสอบ')
+    ) {
+        return {
+            base: 'bg-sky-400/10 border-sky-300/30 hover:bg-sky-400/16 hover:border-sky-200/50',
+            selected: 'bg-sky-400/18 border-sky-200 shadow-lg shadow-sky-400/10',
+        };
+    }
+
+    return {
+        base: 'bg-bg-soft/50 border-line hover:border-primary/50 hover:bg-bg-soft/80 hover:shadow-md',
+        selected: 'bg-primary/10 border-primary shadow-lg shadow-primary/10',
+    };
+}
+
 function AlarmTime({ item, mobile = false }: { item: AlarmItem; mobile?: boolean }) {
     const colorClass = item.notify_status === 'SENT'
         ? 'text-green-400'
@@ -206,13 +234,14 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
             <div className="max-h-[400px] overflow-y-auto space-y-3 pr-2 custom-scrollbar">
                 {items.map(item => {
                     const audioDisplay = formatAudioName(item.audioDisplayName);
+                    const theme = getAlarmThemeClasses(audioDisplay);
 
                     return (
                         <div
                             key={item.id}
                             className={`group rounded-xl border transition-all duration-200 ${selected.has(item.id)
-                                ? 'bg-primary/10 border-primary shadow-lg shadow-primary/10'
-                                : 'bg-bg-soft/50 border-line hover:border-primary/50 hover:bg-bg-soft/80 hover:shadow-md'
+                                ? theme.selected
+                                : theme.base
                                 }`}
                             role="listitem"
                             aria-label={`Alarm at ${item.h}:${item.m}:${item.s} - ${formatAudioName(item.audioDisplayName)}`}
