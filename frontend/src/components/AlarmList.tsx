@@ -13,6 +13,24 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
     const { items, removeItem, updateItem, addItem } = useAlarms();
     const [editingAlarm, setEditingAlarm] = useState<AlarmItem | null>(null);
 
+    const getAudioDisplay = (audioName: string) => {
+        if (!audioName) {
+            return {
+                primary: 'Default alarm sound',
+                secondary: 'System beep'
+            };
+        }
+
+        const trimmed = audioName.trim();
+        const extIndex = trimmed.lastIndexOf('.');
+        const hasExtension = extIndex > 0;
+
+        return {
+            primary: hasExtension ? trimmed.slice(0, extIndex) : trimmed,
+            secondary: trimmed
+        };
+    };
+
     const toggleSelect = (id: string) => {
         const next = new Set(selected);
         if (next.has(id)) next.delete(id);
@@ -92,16 +110,19 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
             </div>
 
             <div className="max-h-[400px] overflow-y-auto space-y-3 pr-2 custom-scrollbar">
-                {items.map(item => (
-                    <div
-                        key={item.id}
-                        className={`group flex flex-col md:flex-row md:items-center justify-between p-4 rounded-xl border transition-all duration-200 gap-3 md:gap-0 ${selected.has(item.id)
-                            ? 'bg-primary/10 border-primary shadow-lg shadow-primary/10'
-                            : 'bg-bg-soft/50 border-line hover:border-primary/50 hover:bg-bg-soft/80 hover:shadow-md'
-                            }`}
-                        role="listitem"
-                        aria-label={`Alarm at ${item.h}:${item.m}:${item.s} - ${item.audioName || 'Default alarm sound'}`}
-                    >
+                {items.map(item => {
+                    const audioDisplay = getAudioDisplay(item.audioName);
+
+                    return (
+                        <div
+                            key={item.id}
+                            className={`group flex flex-col md:flex-row md:items-center justify-between p-4 rounded-xl border transition-all duration-200 gap-3 md:gap-0 ${selected.has(item.id)
+                                ? 'bg-primary/10 border-primary shadow-lg shadow-primary/10'
+                                : 'bg-bg-soft/50 border-line hover:border-primary/50 hover:bg-bg-soft/80 hover:shadow-md'
+                                }`}
+                            role="listitem"
+                            aria-label={`Alarm at ${item.h}:${item.m}:${item.s} - ${item.audioName || 'Default alarm sound'}`}
+                        >
                         <div className="flex items-center justify-between w-full md:w-auto">
                             <div className="flex items-center gap-3">
                                 <div className="w-10 flex items-center justify-center md:hidden">
@@ -147,17 +168,21 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                         </div>
 
                         <div className="flex-1 truncate px-0 md:px-3 w-full md:w-auto">
-                            <div className="font-medium truncate text-fg">
-                                {item.audioName || <span className="text-muted/50 italic">Default alarm sound</span>}
+                            <div
+                                className="font-bold text-base md:text-lg leading-tight truncate text-fg"
+                                title={audioDisplay.primary}
+                            >
+                                {audioDisplay.primary}
                             </div>
-                            {item.audioName && (
-                                <div className="text-xs text-muted/60 truncate mt-0.5 flex items-center gap-1">
-                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
-                                    </svg>
-                                    {item.audioName}
-                                </div>
-                            )}
+                            <div
+                                className="text-sm text-muted/75 truncate mt-1 flex items-center gap-1"
+                                title={audioDisplay.secondary}
+                            >
+                                <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
+                                </svg>
+                                <span className="truncate">{audioDisplay.secondary}</span>
+                            </div>
                         </div>
 
                         <div className="flex items-center justify-between md:justify-end w-full md:w-auto gap-4">
@@ -226,8 +251,9 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                                 </button>
                             </div>
                         </div>
-                    </div>
-                ))}
+                        </div>
+                    );
+                })}
             </div>
 
             {editingAlarm && (
