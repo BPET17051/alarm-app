@@ -15,20 +15,12 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
 
     const getAudioDisplay = (audioName: string) => {
         if (!audioName) {
-            return {
-                primary: 'Default alarm sound',
-                secondary: 'System beep'
-            };
+            return 'Default alarm sound';
         }
 
         const trimmed = audioName.trim();
         const extIndex = trimmed.lastIndexOf('.');
-        const hasExtension = extIndex > 0;
-
-        return {
-            primary: hasExtension ? trimmed.slice(0, extIndex) : trimmed,
-            secondary: trimmed
-        };
+        return extIndex > 0 ? trimmed.slice(0, extIndex) : trimmed;
     };
 
     const toggleSelect = (id: string) => {
@@ -167,26 +159,17 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                             </div>
                         </div>
 
-                        <div className="flex-1 truncate px-0 md:px-3 w-full md:w-auto">
+                        <div className="flex-1 min-w-0 px-0 md:px-4 w-full md:w-auto">
                             <div
-                                className="font-bold text-base md:text-lg leading-tight truncate text-fg"
-                                title={audioDisplay.primary}
+                                className="font-bold text-base md:text-lg leading-snug text-fg break-words whitespace-normal"
+                                title={audioDisplay}
                             >
-                                {audioDisplay.primary}
-                            </div>
-                            <div
-                                className="text-sm text-muted/75 truncate mt-1 flex items-center gap-1"
-                                title={audioDisplay.secondary}
-                            >
-                                <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
-                                </svg>
-                                <span className="truncate">{audioDisplay.secondary}</span>
+                                {audioDisplay}
                             </div>
                         </div>
 
-                        <div className="flex items-center justify-between md:justify-end w-full md:w-auto gap-4">
-                            <div className="hidden md:block w-24 text-right">
+                        <div className="flex items-center justify-between md:justify-end w-full md:w-auto gap-4 md:flex-shrink-0">
+                            <div className="hidden md:block w-24 text-right flex-shrink-0">
                                 {item.notify_status !== 'PENDING' && (
                                     <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-bold uppercase tracking-wider ${item.notify_status === 'SENT'
                                         ? 'bg-green-500/20 text-green-400 border border-green-500/30'
@@ -206,7 +189,7 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                                 )}
                             </div>
 
-                            <div className="flex items-center justify-end gap-1.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity w-full md:w-36">
+                            <div className="flex items-center justify-end gap-1.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity w-full md:w-36 md:flex-shrink-0">
                                 {item.audioId && (
                                     <button
                                         onClick={() => handlePlay(item)}
