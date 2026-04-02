@@ -14,10 +14,7 @@ function getAlarmThemeClasses(audioDisplayName: string) {
     const normalized = audioDisplayName.toLowerCase();
 
     if (normalized.includes('พัก')) {
-        return {
-            base: 'bg-orange-500/10 border-orange-400/30 hover:bg-orange-500/16 hover:border-orange-300/50',
-            selected: 'bg-orange-500/18 border-orange-300 shadow-lg shadow-orange-500/10',
-        };
+        return { accent: 'bg-orange-400' };
     }
 
     if (
@@ -26,16 +23,10 @@ function getAlarmThemeClasses(audioDisplayName: string) {
         || normalized.includes('หมดเวลา')
         || normalized.includes('หมดเวลาสอบ')
     ) {
-        return {
-            base: 'bg-sky-400/10 border-sky-300/30 hover:bg-sky-400/16 hover:border-sky-200/50',
-            selected: 'bg-sky-400/18 border-sky-200 shadow-lg shadow-sky-400/10',
-        };
+        return { accent: 'bg-sky-300' };
     }
 
-    return {
-        base: 'bg-bg-soft/50 border-line hover:border-primary/50 hover:bg-bg-soft/80 hover:shadow-md',
-        selected: 'bg-primary/10 border-primary shadow-lg shadow-primary/10',
-    };
+    return { accent: '' };
 }
 
 function AlarmTime({ item, mobile = false }: { item: AlarmItem; mobile?: boolean }) {
@@ -240,11 +231,11 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                         <div
                             key={item.id}
                             className={`group rounded-xl border transition-all duration-200 ${selected.has(item.id)
-                                ? theme.selected
-                                : theme.base
+                                ? 'bg-primary/10 border-primary shadow-lg shadow-primary/10'
+                                : 'bg-bg-soft/50 border-line hover:border-primary/50 hover:bg-bg-soft/80 hover:shadow-md'
                                 }`}
                             role="listitem"
-                            aria-label={`Alarm at ${item.h}:${item.m}:${item.s} - ${formatAudioName(item.audioDisplayName)}`}
+                            aria-label={`Alarm at ${item.h}:${item.m}:${item.s} - ${audioDisplay}`}
                         >
                             <div className="hidden md:flex items-center gap-3 p-4">
                                 <div className="w-11 flex items-center justify-center shrink-0">
@@ -260,8 +251,13 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                                     <AlarmTime item={item} />
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                    <div className="font-bold text-xl leading-tight text-fg truncate" title={audioDisplay}>
-                                        {audioDisplay}
+                                    <div className="flex items-center gap-3 min-w-0">
+                                        {theme.accent && (
+                                            <span className={`h-8 w-1.5 rounded-full shrink-0 ${theme.accent}`} aria-hidden="true" />
+                                        )}
+                                        <div className="font-bold text-xl leading-tight text-fg truncate" title={audioDisplay}>
+                                            {audioDisplay}
+                                        </div>
                                     </div>
                                 </div>
                                 <div className="w-24 text-right shrink-0">
@@ -291,8 +287,13 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                                     </div>
                                 </div>
                                 <div className="pl-[3.25rem] min-w-0">
-                                    <div className="font-bold text-base leading-tight text-fg truncate" title={audioDisplay}>
-                                        {audioDisplay}
+                                    <div className="flex items-center gap-2 min-w-0">
+                                        {theme.accent && (
+                                            <span className={`h-6 w-1.5 rounded-full shrink-0 ${theme.accent}`} aria-hidden="true" />
+                                        )}
+                                        <div className="font-bold text-base leading-tight text-fg truncate" title={audioDisplay}>
+                                            {audioDisplay}
+                                        </div>
                                     </div>
                                 </div>
                                 <div className="relative">
