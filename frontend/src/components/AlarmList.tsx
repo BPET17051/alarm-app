@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useAlarms } from '../hooks/useAlarms';
 import * as API from '../services/api';
 import type { AlarmItem } from '../types';
@@ -78,6 +79,8 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
     const [editingAlarm, setEditingAlarm] = useState<AlarmItem | null>(null);
     const [playingId, setPlayingId] = useState<string | null>(null);
     const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+    const [desktopMenuPosition, setDesktopMenuPosition] = useState<{ top: number; right: number; placement: 'up' | 'down' } | null>(null);
+    const openMenuItem = openMenuId ? items.find((item) => item.id === openMenuId) ?? null : null;
 
     const toggleSelect = (id: string) => {
         const next = new Set(selected);
@@ -106,7 +109,66 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
     const handleDuplicate = async (item: AlarmItem) => {
         await addItem(item.h, item.m, item.s || 0, item.audioId, item.audioDisplayName);
         setOpenMenuId(null);
+        setDesktopMenuPosition(null);
     };
+
+    useEffect(() => {
+        if (!openMenuId) return;
+
+        const closeMenu = () => {
+            setOpenMenuId(null);
+            setDesktopMenuPosition(null);
+        };
+
+        const handlePointerDown = (event: MouseEvent) => {
+            const target = event.target as HTMLElement | null;
+            if (target?.closest('[data-alarm-menu]') || target?.closest('[data-alarm-menu-trigger]')) {
+                return;
+            }
+            closeMenu();
+        };
+
+        window.addEventListener('resize', closeMenu);
+        window.addEventListener('scroll', closeMenu, true);
+        document.addEventListener('mousedown', handlePointerDown);
+
+        return () => {
+            window.removeEventListener('resize', closeMenu);
+            window.removeEventListener('scroll', closeMenu, true);
+            document.removeEventListener('mousedown', handlePointerDown);
+        };
+    }, [openMenuId]);
+
+    const renderMenuContent = (item: AlarmItem) => (
+        <>
+            <button
+                onClick={() => handleDuplicate(item)}
+                className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-bg-soft"
+            >
+                Duplicate
+            </button>
+            <button
+                onClick={() => {
+                    setEditingAlarm(item);
+                    setOpenMenuId(null);
+                    setDesktopMenuPosition(null);
+                }}
+                className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-bg-soft"
+            >
+                Edit
+            </button>
+            <button
+                onClick={() => {
+                    void removeItem(item.id);
+                    setOpenMenuId(null);
+                    setDesktopMenuPosition(null);
+                }}
+                className="w-full text-left px-3 py-2 rounded-lg text-sm text-danger hover:bg-danger/10"
+            >
+                Delete
+            </button>
+        </>
+    );
 
     const renderActions = (item: AlarmItem, mobile = false, desktopMenuDirection: 'up' | 'down' = 'down') => (
         <div className={`relative flex items-center justify-end gap-1.5 ${mobile ? 'w-full' : openMenuId === item.id ? 'opacity-100' : 'opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity'}`}>
@@ -131,7 +193,22 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                 </button>
             )}
             <button
-                onClick={() => setOpenMenuId(current => current === item.id ? null : item.id)}
+                onClick={(event) => {
+                    const nextOpen = openMenuId === item.id ? null : item.id;
+                    setOpenMenuId(nextOpen);
+
+                    if (!mobile && nextOpen) {
+                        const rect = (event.currentTarget as HTMLButtonElement).getBoundingClientRect();
+                        setDesktopMenuPosition(
+                            desktopMenuDirection === 'up'
+                                ? { top: rect.top - 8, right: window.innerWidth - rect.right, placement: 'up' }
+                                : { top: rect.bottom + 8, right: window.innerWidth - rect.right, placement: 'down' }
+                        );
+                    } else if (!mobile) {
+                        setDesktopMenuPosition(null);
+                    }
+                }}
+                data-alarm-menu-trigger="true"
                 className={`${mobile ? 'p-3' : 'p-2'} hover:bg-primary/20 rounded-lg text-primary transition-all hover:scale-110`}
                 title="More actions"
                 aria-label="More actions"
@@ -140,38 +217,9 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6h.01M12 12h.01M12 18h.01" />
                 </svg>
             </button>
-            {openMenuId === item.id && (
-                <div className={`absolute ${
-                    mobile
-                        ? 'right-4 bottom-14'
-                        : desktopMenuDirection === 'up'
-                            ? 'right-4 bottom-12'
-                            : 'right-4 top-12'
-                } z-20 min-w-[150px] rounded-xl border border-line bg-card shadow-xl p-1`}>
-                    <button
-                        onClick={() => handleDuplicate(item)}
-                        className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-bg-soft"
-                    >
-                        Duplicate
-                    </button>
-                    <button
-                        onClick={() => {
-                            setEditingAlarm(item);
-                            setOpenMenuId(null);
-                        }}
-                        className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-bg-soft"
-                    >
-                        Edit
-                    </button>
-                    <button
-                        onClick={() => {
-                            void removeItem(item.id);
-                            setOpenMenuId(null);
-                        }}
-                        className="w-full text-left px-3 py-2 rounded-lg text-sm text-danger hover:bg-danger/10"
-                    >
-                        Delete
-                    </button>
+            {mobile && openMenuId === item.id && (
+                <div className="absolute right-4 bottom-14 z-20 min-w-[150px] rounded-xl border border-line bg-card shadow-xl p-1" data-alarm-menu="true">
+                    {renderMenuContent(item)}
                 </div>
             )}
         </div>
@@ -320,6 +368,21 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                     onClose={() => setEditingAlarm(null)}
                     onUpdate={handleUpdate}
                 />
+            )}
+
+            {!editingAlarm && openMenuItem && desktopMenuPosition && typeof document !== 'undefined' && createPortal(
+                <div
+                    className="fixed z-[80] min-w-[150px] rounded-xl border border-line bg-card shadow-xl p-1"
+                    style={{
+                        top: desktopMenuPosition.top,
+                        right: desktopMenuPosition.right,
+                        transform: desktopMenuPosition.placement === 'up' ? 'translateY(-100%)' : undefined,
+                    }}
+                    data-alarm-menu="true"
+                >
+                    {renderMenuContent(openMenuItem)}
+                </div>,
+                document.body
             )}
         </div>
     );
