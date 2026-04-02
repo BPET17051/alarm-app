@@ -23,7 +23,9 @@ const TEST_AUDIO_ASSETS: Partial<Record<AudioTestLanguage, string>> = {
 };
 
 export async function unlockBrowserAudio(): Promise<void> {
-    const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    const AudioContextClass =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
 
     if (!AudioContextClass) {
         return;
@@ -49,7 +51,10 @@ export async function unlockBrowserAudio(): Promise<void> {
 }
 
 export async function playFallbackBeep(): Promise<void> {
-    const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    const AudioContextClass =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+
     if (!AudioContextClass) {
         throw new Error('AudioContext not supported');
     }

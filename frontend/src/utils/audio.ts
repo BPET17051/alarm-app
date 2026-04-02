@@ -1,8 +1,20 @@
 const AUDIO_EXTENSION_PATTERN = /\.(mp3|wav|ogg|aac|m4a|flac)$/i;
+const CONTROL_CHAR_PATTERN = /[\u0000-\u001F\u007F-\u009F]/g;
+const ZERO_WIDTH_CHAR_PATTERN = /[\u200B-\u200D\uFEFF]/g;
+const REPLACEMENT_CHAR_PATTERN = /\uFFFD/g;
+
 export const AUDIO_DISPLAY_NAME_MAX_LENGTH = 40;
 
+function normalizeDisplayText(raw: string): string {
+    return raw
+        .normalize('NFC')
+        .replace(REPLACEMENT_CHAR_PATTERN, '')
+        .replace(ZERO_WIDTH_CHAR_PATTERN, '')
+        .replace(CONTROL_CHAR_PATTERN, ' ');
+}
+
 export function stripAudioExtension(raw: string): string {
-    return raw.trim().replace(AUDIO_EXTENSION_PATTERN, '');
+    return normalizeDisplayText(raw).trim().replace(AUDIO_EXTENSION_PATTERN, '');
 }
 
 export function sanitizeAudioDisplayName(
@@ -21,24 +33,12 @@ export function formatAudioName(
     return sanitizeAudioDisplayName(raw, fallback);
 }
 
-// ---------------------------------------------------------------------------
-// Playback
-// ---------------------------------------------------------------------------
-
 export type PlaybackResult = 'audio' | 'beep' | 'failed';
 
-/**
- * Plays the alarm audio for a given URL, returning a promise that resolves
- * when playback ends. `onended` / `onerror` are registered before `play()`
- * to avoid the race condition where a very short clip fires `ended` before
- * the handlers are attached.
- */
 export function playAudioFile(url: string): Promise<PlaybackResult> {
     return new Promise((resolve) => {
         const audio = new Audio(url);
         audio.preload = 'auto';
-
-        // Attach handlers BEFORE calling play() to avoid race condition
         audio.onended = () => resolve('audio');
         audio.onerror = () => resolve('failed');
 
@@ -49,10 +49,6 @@ export function playAudioFile(url: string): Promise<PlaybackResult> {
     });
 }
 
-/**
- * Plays a two-tone beep using the Web Audio API.
- * Mirrors the sound used in audioTest.ts → playFallbackBeep().
- */
 export async function playBeepFallback(): Promise<PlaybackResult> {
     const AudioContextClass =
         window.AudioContext ||
@@ -89,14 +85,11 @@ export async function playBeepFallback(): Promise<PlaybackResult> {
     });
 }
 
-/**
- * High-level alarm playback: plays the audio file if `audioUrl` is provided,
- * otherwise falls back to a beep.
- */
 export async function playAlarm(audioUrl: string | null): Promise<PlaybackResult> {
     if (audioUrl) {
         const result = await playAudioFile(audioUrl);
         if (result !== 'failed') return result;
     }
+
     return playBeepFallback();
 }
