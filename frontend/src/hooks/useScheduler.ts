@@ -7,7 +7,6 @@ export function useScheduler(
     items: AlarmItem[],
     playedIds: Set<string>,
     markPlayed: (id: string, status: 'SENT' | 'FAILED') => void,
-    isAudioEnabled: boolean,
     dayKey: string,
     serverTime?: Date
 ) {
@@ -39,13 +38,7 @@ export function useScheduler(
                     // Lock immediately
                     triggeredAlarms.current.add(item.id);
 
-                    if (!isAudioEnabled) {
-                        console.warn('Audio not enabled, skipping playback');
-                        markPlayed(item.id, 'FAILED');
-                        return;
-                    }
-
-                    // Play audio — promise resolves after playback ends (or beep falls back)
+                    // Play audio even when the ready indicator is false. The playback result decides status.
                     try {
                         const audioUrl = item.audioId ? API.getAudioUrl(item.audioId) : null;
                         const result = await playAlarm(audioUrl);
@@ -62,5 +55,5 @@ export function useScheduler(
         check(); // Initial check
 
         return () => clearInterval(interval);
-    }, [items, playedIds, markPlayed, isAudioEnabled, serverTime]);
+    }, [items, playedIds, markPlayed, serverTime]);
 }

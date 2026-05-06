@@ -26,7 +26,7 @@ export function Home() {
         syncPlaybackDay(dayKey);
     }, [dayKey, syncPlaybackDay]);
 
-    useScheduler(items, playedIds, markPlayed, isAudioEnabled, dayKey, serverTime);
+    useScheduler(items, playedIds, markPlayed, dayKey, serverTime);
 
     const effectiveTestStatus = isAudioEnabled && testStatus === 'idle' ? 'success' : testStatus;
 
@@ -40,7 +40,7 @@ export function Home() {
         }
     };
 
-    let audioStatusText = 'กดทดสอบเสียง';
+    let audioStatusText = 'ระบบจะเปิดเสียงอัตโนมัติเมื่อบันทึก alarm';
     let audioStatusClass = 'text-amber-400/80';
 
     if (effectiveTestStatus === 'testing') {

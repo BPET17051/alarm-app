@@ -7,7 +7,7 @@ import { normalizeTime } from '../utils/time';
 import { sanitizeAudioDisplayName } from '../utils/audio';
 
 export function AlarmForm() {
-    const { addItem } = useAlarms();
+    const { addItem, armAudio } = useAlarms();
     const [h, setH] = useState(new Date().getHours());
     const [m, setM] = useState(new Date().getMinutes());
     const [s, setS] = useState(0);
@@ -23,6 +23,7 @@ export function AlarmForm() {
         e.preventDefault();
 
         setIsSubmitting(true);
+        void armAudio();
 
         try {
             let audioId = null;

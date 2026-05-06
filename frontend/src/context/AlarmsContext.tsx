@@ -23,6 +23,7 @@ interface AlarmsContextType {
     loadTemplate: (name: string) => Promise<void>;
     deleteTemplate: (name: string) => void;
     isAudioEnabled: boolean;
+    armAudio: () => Promise<boolean>;
     testAudio: (language: AudioTestLanguage) => Promise<AudioTestResult>;
 }
 
@@ -235,9 +236,20 @@ export function AlarmsProvider({ children }: { children: ReactNode }) {
         }
     }, []);
 
-    const testAudio = useCallback(async (language: AudioTestLanguage) => {
+    const armAudio = useCallback(async () => {
         try {
             await unlockBrowserAudio();
+            setIsAudioEnabled(true);
+            return true;
+        } catch (e: unknown) {
+            console.error('Failed to arm audio', e);
+            return false;
+        }
+    }, []);
+
+    const testAudio = useCallback(async (language: AudioTestLanguage) => {
+        try {
+            await armAudio();
             const result = await playTestAnnouncement(language);
             setIsAudioEnabled(true);
             return result;
@@ -245,7 +257,7 @@ export function AlarmsProvider({ children }: { children: ReactNode }) {
             console.error('Failed to test audio', e);
             throw e;
         }
-    }, []);
+    }, [armAudio]);
 
     const value = {
         items,
@@ -266,6 +278,7 @@ export function AlarmsProvider({ children }: { children: ReactNode }) {
 
         deleteTemplate,
         isAudioEnabled,
+        armAudio,
         testAudio
     };
 

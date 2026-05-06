@@ -3,6 +3,7 @@ import type { AlarmItem } from '../types';
 import { AudioSelectionModal } from './AudioSelectionModal';
 import type { AudioSelection } from './AudioSelectionModal';
 import { normalizeTime } from '../utils/time';
+import { useAlarms } from '../hooks/useAlarms';
 
 interface EditAlarmModalProps {
     alarm: AlarmItem;
@@ -12,6 +13,7 @@ interface EditAlarmModalProps {
 }
 
 export function EditAlarmModal({ alarm, isOpen, onClose, onUpdate }: EditAlarmModalProps) {
+    const { armAudio } = useAlarms();
     const [h, setH] = useState(alarm.h);
     const [m, setM] = useState(alarm.m);
     const [s, setS] = useState(alarm.s || 0);
@@ -41,6 +43,7 @@ export function EditAlarmModal({ alarm, isOpen, onClose, onUpdate }: EditAlarmMo
         const audioId = audioSelection?.source === 'select' ? audioSelection.id : null;
         const audioDisplayName = audioSelection?.source === 'select' ? audioSelection.displayName : '';
         const nextTime = normalizeTime(h, m, s);
+        void armAudio();
 
         await onUpdate(alarm.id, { h: nextTime.h, m: nextTime.m, s: nextTime.s, audioId, audioDisplayName });
         onClose();
