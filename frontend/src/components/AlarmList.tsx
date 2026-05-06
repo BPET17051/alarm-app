@@ -38,7 +38,7 @@ function AlarmTime({ item, mobile = false }: { item: AlarmItem; mobile?: boolean
             : 'text-fg';
 
     return (
-        <div className={`${mobile ? 'text-2xl' : 'text-lg'} font-bold tabular-nums transition-colors ${colorClass}`}>
+        <div className={`${mobile ? 'text-2xl' : 'text-xl'} font-bold tabular-nums transition-colors ${colorClass}`}>
             <span className="inline-block min-w-[2ch] text-right">{item.h.toString().padStart(2, '0')}</span>
             <span className="text-muted/50 mx-0.5">:</span>
             <span className="inline-block min-w-[2ch] text-right">{item.m.toString().padStart(2, '0')}</span>
@@ -58,7 +58,7 @@ function AlarmStatus({ item, mobile = false }: { item: AlarmItem; mobile?: boole
         : 'bg-danger/20 text-danger border border-danger/30';
 
     return (
-        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-bold uppercase tracking-wider ${badgeClass}`}>
+        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${badgeClass}`}>
             {!mobile && item.notify_status === 'SENT' && (
                 <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"></path>
@@ -171,12 +171,12 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
     );
 
     const renderActions = (item: AlarmItem, mobile = false, desktopMenuDirection: 'up' | 'down' = 'down') => (
-        <div className={`relative flex items-center justify-end gap-1.5 ${mobile ? 'w-full' : openMenuId === item.id ? 'opacity-100' : 'opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity'}`}>
+        <div className={`relative flex items-center justify-end gap-1.5 ${mobile ? 'w-full' : 'opacity-100'}`}>
             {item.audioId && (
                 <button
                     onClick={() => handlePlay(item)}
                     disabled={!!playingId}
-                    className={`${mobile ? 'p-3' : 'p-2'} hover:bg-primary/20 rounded-lg text-primary transition-all hover:scale-110 disabled:opacity-40 disabled:cursor-not-allowed`}
+                    className={`${mobile ? 'h-11 w-11' : 'h-9 w-9'} inline-flex items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary transition-colors hover:bg-primary/20 focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:opacity-40 disabled:cursor-not-allowed`}
                     title={playingId === item.id ? 'Playing...' : 'Play audio preview'}
                     aria-label={playingId === item.id ? 'Playing audio preview' : 'Play audio preview'}
                 >
@@ -209,7 +209,7 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                     }
                 }}
                 data-alarm-menu-trigger="true"
-                className={`${mobile ? 'p-3' : 'p-2'} hover:bg-primary/20 rounded-lg text-primary transition-all hover:scale-110`}
+                className={`${mobile ? 'h-11 w-11' : 'h-9 w-9'} inline-flex items-center justify-center rounded-lg border border-line bg-bg-soft/60 text-primary transition-colors hover:bg-primary/20 focus:outline-none focus:ring-2 focus:ring-primary/50`}
                 title="More actions"
                 aria-label="More actions"
             >
@@ -248,7 +248,7 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
     return (
         <div className="space-y-3">
             <div className="hidden md:flex sticky top-0 bg-card/95 backdrop-blur-sm z-10 items-center gap-4 px-4 py-3 text-xs font-bold text-muted/70 uppercase tracking-wider border-b border-line/50">
-                <div className="w-11 flex items-center justify-center">
+                <div className="w-9 flex items-center justify-center">
                     <input
                         type="checkbox"
                         checked={selected.size === items.length && items.length > 0}
@@ -258,10 +258,10 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                         title={selected.size === items.length ? 'Deselect all' : 'Select all'}
                     />
                 </div>
-                <div className="w-24">Time</div>
+                <div className="w-32">Time</div>
                 <div className="flex-1 min-w-0">Audio</div>
-                <div className="w-24 text-right">Status</div>
-                <div className="w-40 text-right">Actions</div>
+                <div className="w-20 text-right">Status</div>
+                <div className="w-24 text-right">Actions</div>
             </div>
 
             <div className="md:hidden flex items-center justify-between px-4 py-2 mb-2">
@@ -276,7 +276,7 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                 </label>
             </div>
 
-            <div className="max-h-[400px] overflow-y-auto space-y-3 pr-2 custom-scrollbar">
+            <div className="h-[min(54vh,520px)] min-h-[340px] overflow-y-auto space-y-2 pr-2 custom-scrollbar">
                 {items.map((item, index) => {
                     const audioDisplay = formatAudioName(item.audioDisplayName);
                     const theme = getAlarmThemeClasses(audioDisplay);
@@ -293,8 +293,8 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                             role="listitem"
                             aria-label={`Alarm at ${item.h}:${item.m}:${item.s} - ${audioDisplay}`}
                         >
-                            <div className="hidden md:flex items-center gap-3 p-4">
-                                <div className="w-11 flex items-center justify-center shrink-0">
+                            <div className="hidden md:grid md:grid-cols-[2.25rem_8rem_minmax(0,1fr)_5rem_6rem] items-center gap-3 px-4 py-3 min-h-[78px]">
+                                <div className="flex items-center justify-center shrink-0">
                                     <input
                                         type="checkbox"
                                         checked={selected.has(item.id)}
@@ -303,31 +303,34 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                                         aria-label={`Select alarm at ${item.h}:${item.m}:${item.s}`}
                                     />
                                 </div>
-                                <div className="w-24 shrink-0">
+                                <div className="shrink-0">
                                     <AlarmTime item={item} />
                                 </div>
-                                <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-3 min-w-0">
-                                        {theme.accent && (
-                                            <span className={`h-8 w-1.5 rounded-full shrink-0 ${theme.accent}`} aria-hidden="true" />
-                                        )}
-                                        <div className="font-bold text-xl leading-tight text-fg truncate" title={audioDisplay}>
-                                            {audioDisplay}
+                                <div className="min-w-0">
+                                    <div className="flex items-start gap-3 min-w-0">
+                                        <span className={`mt-1 h-10 w-1.5 rounded-full shrink-0 ${theme.accent || 'bg-line'}`} aria-hidden="true" />
+                                        <div className="min-w-0">
+                                            <div className="text-[10px] font-bold uppercase tracking-wider text-muted/60 leading-none mb-1">
+                                                Audio
+                                            </div>
+                                            <div className="line-clamp-2 font-bold text-base leading-snug text-fg" title={audioDisplay}>
+                                                {audioDisplay}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
-                                <div className="w-24 text-right shrink-0">
+                                <div className="text-right shrink-0">
                                     <AlarmStatus item={item} />
                                 </div>
-                                <div className="w-24 shrink-0 relative">
+                                <div className="shrink-0 relative">
                                     {renderActions(item, false, desktopMenuDirection)}
                                 </div>
                             </div>
 
-                            <div className="md:hidden p-4 space-y-3">
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-10 flex items-center justify-center">
+                            <div className="md:hidden p-3 space-y-2 min-h-[112px]">
+                                <div className="flex items-start justify-between gap-3">
+                                    <div className="flex items-center gap-3 min-w-0">
+                                        <div className="w-9 flex items-center justify-center shrink-0 pt-1">
                                             <input
                                                 type="checkbox"
                                                 checked={selected.has(item.id)}
@@ -338,21 +341,24 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                                         </div>
                                         <AlarmTime item={item} mobile />
                                     </div>
-                                    <div>
+                                    <div className="shrink-0 pt-1">
                                         <AlarmStatus item={item} mobile />
                                     </div>
                                 </div>
-                                <div className="pl-[3.25rem] min-w-0">
-                                    <div className="flex items-center gap-2 min-w-0">
-                                        {theme.accent && (
-                                            <span className={`h-6 w-1.5 rounded-full shrink-0 ${theme.accent}`} aria-hidden="true" />
-                                        )}
-                                        <div className="font-bold text-base leading-tight text-fg truncate" title={audioDisplay}>
+                                <div className="pl-12 min-w-0">
+                                    <div className="flex items-start gap-2 min-w-0">
+                                        <span className={`mt-1 h-9 w-1.5 rounded-full shrink-0 ${theme.accent || 'bg-line'}`} aria-hidden="true" />
+                                        <div className="min-w-0">
+                                            <div className="text-[10px] font-bold uppercase tracking-wider text-muted/60 leading-none mb-1">
+                                                Audio
+                                            </div>
+                                            <div className="line-clamp-2 font-bold text-base leading-snug text-fg" title={audioDisplay}>
                                             {audioDisplay}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
-                                <div className="relative">
+                                <div className="relative pl-12">
                                     {renderActions(item, true)}
                                 </div>
                             </div>
