@@ -75,7 +75,7 @@ function AlarmStatus({ item, mobile = false }: { item: AlarmItem; mobile?: boole
 }
 
 export function AlarmList({ selected, onSelect }: AlarmListProps) {
-    const { items, removeItem, updateItem, addItem } = useAlarms();
+    const { items, alarmsStatus, alarmsError, retryLoadAlarms, removeItem, updateItem, addItem } = useAlarms();
     const [editingAlarm, setEditingAlarm] = useState<AlarmItem | null>(null);
     const [playingId, setPlayingId] = useState<string | null>(null);
     const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -225,6 +225,36 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
         </div>
     );
 
+    if (alarmsStatus === 'loading') {
+        return (
+            <div className="text-center py-16" role="status" aria-live="polite">
+                <div className="mx-auto mb-5 h-10 w-10 rounded-full border-4 border-line border-t-primary animate-spin" aria-hidden="true" />
+                <h3 className="text-xl font-bold text-muted mb-2">Loading alarm schedule</h3>
+                <p className="text-muted/70">Checking the alarm service…</p>
+            </div>
+        );
+    }
+
+    if (alarmsStatus === 'error') {
+        return (
+            <div className="my-8 rounded-2xl border border-danger/50 bg-danger/10 px-6 py-8 text-center" role="alert" aria-live="assertive">
+                <svg className="mx-auto mb-4 h-12 w-12 text-danger" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v4m0 4h.01M10.29 3.86l-8.82 15.29A1 1 0 002.34 20h19.32a1 1 0 00.87-1.5L13.71 3.86a1 1 0 00-1.72 0z" />
+                </svg>
+                <h3 className="text-xl font-bold text-danger mb-2">Alarm schedule unavailable</h3>
+                <p className="mx-auto max-w-lg text-muted mb-2">{alarmsError}</p>
+                <p className="text-sm font-semibold text-fg mb-6">Do not assume the schedule is empty.</p>
+                <button
+                    type="button"
+                    onClick={() => void retryLoadAlarms()}
+                    className="rounded-lg bg-primary px-5 py-2.5 font-semibold text-white transition-colors hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary/60"
+                >
+                    Retry connection
+                </button>
+            </div>
+        );
+    }
+
     if (items.length === 0) {
         return (
             <div className="text-center py-16">
@@ -276,7 +306,11 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                 </label>
             </div>
 
-            <div className="h-[min(54vh,520px)] min-h-[340px] overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+            <div
+                className="h-[min(54vh,520px)] min-h-[340px] overflow-y-auto space-y-2 pr-2 custom-scrollbar"
+                role="list"
+                aria-label="Scheduled alarms"
+            >
                 {items.map((item, index) => {
                     const audioDisplay = formatAudioName(item.audioDisplayName);
                     const theme = getAlarmThemeClasses(audioDisplay);

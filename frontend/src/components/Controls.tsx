@@ -11,6 +11,7 @@ export function Controls({ selected }: ControlsProps) {
     const [showLoad, setShowLoad] = useState(false);
     const [showShift, setShowShift] = useState(false);
     const [showEqualize, setShowEqualize] = useState(false);
+    const [showClearConfirmation, setShowClearConfirmation] = useState(false);
     const [templateName, setTemplateName] = useState('');
     const [shiftAmount, setShiftAmount] = useState(0);
     const [shiftUnit, setShiftUnit] = useState<'m' | 's'>('m');
@@ -73,11 +74,7 @@ export function Controls({ selected }: ControlsProps) {
                 </div>
 
                 <button
-                    onClick={() => {
-                        if (window.confirm('Delete all alarms? This action cannot be undone.')) {
-                            clearAll();
-                        }
-                    }}
+                    onClick={() => setShowClearConfirmation(true)}
                     className="ml-auto px-4 py-2.5 rounded-lg border border-danger/50 text-danger hover:bg-danger/10 hover:border-danger transition-all text-sm font-semibold flex items-center gap-2"
                     aria-label="Clear all alarms"
                 >
@@ -87,6 +84,50 @@ export function Controls({ selected }: ControlsProps) {
                     Clear All
                 </button>
             </div>
+
+            {showClearConfirmation && (
+                <div
+                    className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 backdrop-blur-sm animate-fade-in px-4"
+                    onClick={() => setShowClearConfirmation(false)}
+                    onKeyDown={(e) => e.key === 'Escape' && setShowClearConfirmation(false)}
+                    role="alertdialog"
+                    aria-modal="true"
+                    aria-labelledby="clear-all-modal-title"
+                    aria-describedby="clear-all-modal-description"
+                >
+                    <div className="bg-card border border-danger/40 p-6 rounded-2xl shadow-2xl w-full max-w-md animate-scale-in" onClick={(e) => e.stopPropagation()}>
+                        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-danger/15 text-danger" aria-hidden="true">
+                            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.87 12.14A2 2 0 0116.14 21H7.86a2 2 0 01-2-1.86L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                        </div>
+                        <h3 id="clear-all-modal-title" className="text-xl font-bold mb-2">Clear all alarms?</h3>
+                        <p id="clear-all-modal-description" className="text-sm text-muted/80 mb-6">
+                            This permanently deletes every alarm in the current schedule. This action cannot be undone.
+                        </p>
+                        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setShowClearConfirmation(false)}
+                                className="px-4 py-2.5 rounded-lg border border-line hover:bg-white/5 transition-colors font-semibold"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    void clearAll();
+                                    setShowClearConfirmation(false);
+                                }}
+                                className="px-4 py-2.5 rounded-lg bg-danger text-white hover:bg-danger/90 transition-colors font-semibold"
+                                autoFocus
+                            >
+                                Delete all alarms
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {showShift && (
                 <div
