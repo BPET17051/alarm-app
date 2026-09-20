@@ -15,5 +15,5 @@ services:
         value: https://alarm-app-omega.vercel.app
       - key: SUPABASE_URL
         sync: false
-      - key: SUPABASE_KEY
+      - key: SUPABASE_SECRET_KEY
         sync: false
