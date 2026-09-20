@@ -218,6 +218,78 @@ test.describe('Time Alarm — channel flow and dashboard', () => {
   });
 });
 
+test.describe('Missed announcements', () => {
+  test.use({ timezoneId: 'Asia/Bangkok' });
+
+  test('flags past pending alarms as missed and only counts upcoming ones as next', async ({ page }) => {
+    await mockApi(page, {
+      alarms: [
+        { ...alarm, id: 'missed-1', h: 9, m: 30, s: 0, notify_status: 'PENDING' },
+        { ...alarm, id: 'upcoming-1', h: 12, m: 30, s: 0, audioDisplayName: 'Upcoming bell', notify_status: 'PENDING' },
+        { ...alarm, id: 'sent-1', h: 8, m: 0, s: 0, audioDisplayName: 'Already played', notify_status: 'SENT' },
+      ],
+    });
+    // 05:00Z is 12:00 in Bangkok
+    await page.route('**/api/time', (route) => route.fulfill({ json: { iso: '2026-09-21T05:00:00.000Z' } }));
+    await enterChannel(page);
+
+    await expect(page.getByRole('alert')).toContainText('มี 1 รายการเลยเวลาแล้วแต่ยังไม่ได้เล่น');
+    const missedRow = page.getByRole('listitem', { name: /รายการเวลา 9:30:0/ });
+    await expect(missedRow.getByText('พลาดเวลา').filter({ visible: true })).toBeVisible();
+    await expect(page.getByRole('listitem', { name: /Upcoming bell/ }).getByText('พลาดเวลา')).toHaveCount(0);
+    await expect(page.getByRole('listitem', { name: /Already played/ }).getByText('เล่นแล้ว').filter({ visible: true })).toBeVisible();
+    await expect(page.getByText(/12:30:00 · อีก/)).toBeVisible();
+  });
+
+  test('shows no missed banner when nothing has been skipped', async ({ page }) => {
+    await mockApi(page, { alarms: [{ ...alarm, id: 'upcoming-1', h: 12, m: 30, s: 0, notify_status: 'PENDING' }] });
+    await page.route('**/api/time', (route) => route.fulfill({ json: { iso: '2026-09-21T05:00:00.000Z' } }));
+    await enterChannel(page);
+
+    await expect(page.getByRole('list', { name: 'ตารางประกาศ' })).toBeVisible();
+    await expect(page.getByText('เลยเวลาแล้วแต่ยังไม่ได้เล่น')).toHaveCount(0);
+  });
+});
+
+test.describe('Channel list states', () => {
+  test('shows a loading state instead of "no channels" while the list is being fetched', async ({ page }) => {
+    await mockApi(page);
+    await page.route('**/api/channels', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await route.fulfill({ json: [] });
+    });
+    await page.goto(BASE_URL);
+
+    await expect(page.getByText('กำลังโหลดรายการช่อง...')).toBeVisible();
+    await expect(page.getByText('ยังไม่มีช่อง')).toHaveCount(0);
+    await page.getByLabel('ชื่อช่องใหม่').fill('Course A');
+    await expect(page.getByRole('button', { name: 'สร้างช่อง' })).toBeDisabled();
+
+    await expect(page.getByText('ยังไม่มีช่อง สร้างช่องแรกด้านล่าง')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'สร้างช่อง' })).toBeEnabled();
+  });
+
+  test('shows a failure with retry, never "no channels", and blocks creating while the list is unknown', async ({ page }) => {
+    let available = false;
+    await mockApi(page);
+    await page.route('**/api/channels', (route) => available
+      ? route.fulfill({ json: [channel] })
+      : route.fulfill({ status: 503, json: { message: 'unavailable' } }));
+    await page.goto(BASE_URL);
+
+    const alert = page.getByRole('alert');
+    await expect(alert).toContainText('โหลดรายการช่องไม่สำเร็จ');
+    await expect(page.getByText('ยังไม่มีช่อง')).toHaveCount(0);
+    await page.getByLabel('ชื่อช่องใหม่').fill('Course A');
+    await expect(page.getByRole('button', { name: 'สร้างช่อง' })).toBeDisabled();
+
+    available = true;
+    await alert.getByRole('button', { name: 'ลองใหม่' }).click();
+    await expect(page.getByText('General')).toBeVisible();
+    await expect(page.getByRole('alert')).toHaveCount(0);
+  });
+});
+
 test.describe('Viewport sanity', () => {
   for (const [name, viewport] of Object.entries({
     desktop: { width: 1440, height: 900 },
