@@ -1,14 +1,15 @@
 import { useEffect, useRef } from 'react';
 import type { AlarmItem } from '../types';
 import * as API from '../services/api';
-import { playAlarm } from '../utils/audio';
+import { playAlarm, stopAlarm } from '../utils/audio';
 
 export function useScheduler(
     items: AlarmItem[],
     playedIds: Set<string>,
     markPlayed: (id: string, status: 'SENT' | 'FAILED') => void,
     dayKey: string,
-    serverTime?: Date
+    serverTime?: Date,
+    enabled = true
 ) {
     const triggeredAlarms = useRef<Set<string>>(new Set());
 
@@ -17,6 +18,11 @@ export function useScheduler(
     }, [dayKey]);
 
     useEffect(() => {
+        if (!enabled) {
+            stopAlarm();
+            return;
+        }
+
         const check = () => {
             // Use synced server time if available, otherwise fallback to local time
             const now = serverTime || new Date();
@@ -42,6 +48,7 @@ export function useScheduler(
                     try {
                         const audioUrl = item.audioId ? API.getAudioUrl(item.audioId) : null;
                         const result = await playAlarm(audioUrl);
+                        if (result === 'cancelled') return;
                         markPlayed(item.id, result !== 'failed' ? 'SENT' : 'FAILED');
                     } catch (e) {
                         console.error(e);
@@ -55,5 +62,5 @@ export function useScheduler(
         check(); // Initial check
 
         return () => clearInterval(interval);
-    }, [items, playedIds, markPlayed, serverTime]);
+    }, [items, playedIds, markPlayed, serverTime, enabled]);
 }

@@ -1,4 +1,4 @@
-import type { AlarmItem, AudioFile } from '../types';
+import type { AlarmItem, AudioFile, Channel, ChannelSession, Template, TemplateItem } from '../types';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
 
@@ -31,43 +31,123 @@ function normalizeAudioFile(file: AudioFileApiResponse): AudioFile {
     };
 }
 
-export async function getAlarms(): Promise<AlarmItem[]> {
-    const res = await fetch(`${API_URL}/alarms`);
-    if (!res.ok) throw new Error('Failed to fetch alarms');
+export class ApiError extends Error {
+    status: number;
+
+    constructor(message: string, status: number) {
+        super(message);
+        this.status = status;
+    }
+}
+
+async function failFrom(res: Response, fallback: string): Promise<never> {
+    let message = fallback;
+    try {
+        const body = await res.json();
+        if (body?.message) message = body.message;
+    } catch {
+        // keep fallback message
+    }
+    throw new ApiError(message, res.status);
+}
+
+const channelHeaders = (token: string) => ({ 'X-Channel-Token': token });
+const alarmsUrl = (session: ChannelSession) => `${API_URL}/channels/${session.channelId}/alarms`;
+
+export async function getChannels(): Promise<Channel[]> {
+    const res = await fetch(`${API_URL}/channels`);
+    if (!res.ok) return failFrom(res, 'Failed to fetch channels');
+    return res.json();
+}
+
+export async function createChannel(name: string): Promise<Channel> {
+    const res = await fetch(`${API_URL}/channels`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+    });
+    if (!res.ok) return failFrom(res, 'Failed to create channel');
+    return res.json();
+}
+
+export async function lockChannel(channelId: string, token: string): Promise<{ expiresAt: string | null }> {
+    const res = await fetch(`${API_URL}/channels/${channelId}/lock`, {
+        method: 'POST',
+        headers: channelHeaders(token),
+    });
+    if (!res.ok) return failFrom(res, 'Failed to lock channel');
+    return res.json();
+}
+
+export async function unlockChannel(channelId: string, token: string): Promise<void> {
+    const res = await fetch(`${API_URL}/channels/${channelId}/unlock`, {
+        method: 'POST',
+        headers: channelHeaders(token),
+    });
+    if (!res.ok) return failFrom(res, 'Failed to unlock channel');
+}
+
+export async function renameChannel(session: ChannelSession, name: string): Promise<Channel> {
+    const res = await fetch(`${API_URL}/channels/${session.channelId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...channelHeaders(session.token) },
+        body: JSON.stringify({ name }),
+    });
+    if (!res.ok) return failFrom(res, 'Failed to rename channel');
+    return res.json();
+}
+
+export async function deleteChannel(channelId: string, token: string): Promise<void> {
+    const res = await fetch(`${API_URL}/channels/${channelId}`, {
+        method: 'DELETE',
+        headers: channelHeaders(token),
+    });
+    if (!res.ok) return failFrom(res, 'Failed to delete channel');
+}
+
+export async function getAlarms(session: ChannelSession): Promise<AlarmItem[]> {
+    const res = await fetch(alarmsUrl(session), { headers: channelHeaders(session.token) });
+    if (!res.ok) return failFrom(res, 'Failed to fetch alarms');
     const data: AlarmApiResponse[] = await res.json();
     return data.map(normalizeAlarm);
 }
 
-export async function createAlarm(alarm: Omit<AlarmItem, 'id' | 'notify_status'>): Promise<AlarmItem> {
-    const res = await fetch(`${API_URL}/alarms`, {
+export async function createAlarm(session: ChannelSession, alarm: Omit<AlarmItem, 'id' | 'notify_status'>): Promise<AlarmItem> {
+    const res = await fetch(alarmsUrl(session), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...channelHeaders(session.token) },
         body: JSON.stringify(alarm),
     });
-    if (!res.ok) throw new Error('Failed to create alarm');
+    if (!res.ok) return failFrom(res, 'Failed to create alarm');
     const data: AlarmApiResponse = await res.json();
     return normalizeAlarm(data);
 }
 
-export async function updateAlarm(id: string, updates: Partial<AlarmItem>): Promise<AlarmItem> {
-    const res = await fetch(`${API_URL}/alarms/${id}`, {
+export async function updateAlarm(session: ChannelSession, id: string, updates: Partial<AlarmItem>): Promise<AlarmItem> {
+    const res = await fetch(`${alarmsUrl(session)}/${id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...channelHeaders(session.token) },
         body: JSON.stringify(updates),
     });
-    if (!res.ok) throw new Error('Failed to update alarm');
+    if (!res.ok) return failFrom(res, 'Failed to update alarm');
     const data: AlarmApiResponse = await res.json();
     return normalizeAlarm(data);
 }
 
-export async function deleteAlarm(id: string): Promise<void> {
-    const res = await fetch(`${API_URL}/alarms/${id}`, { method: 'DELETE' });
-    if (!res.ok) throw new Error('Failed to delete alarm');
+export async function deleteAlarm(session: ChannelSession, id: string): Promise<void> {
+    const res = await fetch(`${alarmsUrl(session)}/${id}`, {
+        method: 'DELETE',
+        headers: channelHeaders(session.token),
+    });
+    if (!res.ok) return failFrom(res, 'Failed to delete alarm');
 }
 
-export async function clearAlarms(): Promise<void> {
-    const res = await fetch(`${API_URL}/alarms`, { method: 'DELETE' });
-    if (!res.ok) throw new Error('Failed to clear alarms');
+export async function clearAlarms(session: ChannelSession): Promise<void> {
+    const res = await fetch(alarmsUrl(session), {
+        method: 'DELETE',
+        headers: channelHeaders(session.token),
+    });
+    if (!res.ok) return failFrom(res, 'Failed to clear alarms');
 }
 
 export async function getAudioFiles(): Promise<AudioFile[]> {
@@ -124,22 +204,27 @@ export function getAudioUrl(id: string): string {
     return `${API_URL}/audio/${id}`;
 }
 
-export interface Template {
-    name: string;
-    items: AlarmItem[];
+function toTemplateItem(item: AlarmApiResponse): TemplateItem {
+    return {
+        h: item.h,
+        m: item.m,
+        s: item.s || 0,
+        audioId: item.audioId ?? null,
+        audioDisplayName: item.audioDisplayName ?? item.audioName ?? '',
+    };
 }
 
 export async function getTemplates(): Promise<Template[]> {
     const res = await fetch(`${API_URL}/templates`);
     if (!res.ok) throw new Error('Failed to fetch templates');
     const data = await res.json();
-    return data.templates.map((template: Template & { items: AlarmApiResponse[] }) => ({
-        ...template,
-        items: template.items.map(normalizeAlarm),
+    return data.templates.map((template: { name: string; items: AlarmApiResponse[] }) => ({
+        name: template.name,
+        items: template.items.map(toTemplateItem),
     }));
 }
 
-export async function saveTemplate(name: string, items: AlarmItem[]): Promise<void> {
+export async function saveTemplate(name: string, items: TemplateItem[]): Promise<void> {
     const res = await fetch(`${API_URL}/templates`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

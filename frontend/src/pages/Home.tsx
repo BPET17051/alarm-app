@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useChannel } from '../context/ChannelContext';
 import { Layout } from '../components/Layout';
 import { useAlarms } from '../hooks/useAlarms';
 import { useScheduler } from '../hooks/useScheduler';
@@ -13,6 +14,10 @@ import type { AudioTestLanguage } from '../services/audioTest';
 export function Home() {
     const { items, playedIds, markPlayed, isAudioEnabled, testAudio, syncPlaybackDay } = useAlarms();
     const { serverTime, offset, isSyncing, error } = useTimeSync();
+    const { session, leaseConfirmed, leaveChannel, renameChannel } = useChannel();
+    const [isRenaming, setIsRenaming] = useState(false);
+    const [renameValue, setRenameValue] = useState('');
+    const [renameError, setRenameError] = useState<string | null>(null);
     const dayKey = formatDayKey(serverTime);
     const [selectedLanguage, setSelectedLanguage] = useState<AudioTestLanguage>('th');
     const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'fallback' | 'failed'>('idle');
@@ -26,7 +31,7 @@ export function Home() {
         syncPlaybackDay(dayKey);
     }, [dayKey, syncPlaybackDay]);
 
-    useScheduler(items, playedIds, markPlayed, dayKey, serverTime);
+    useScheduler(items, playedIds, markPlayed, dayKey, serverTime, leaseConfirmed);
 
     const effectiveTestStatus = isAudioEnabled && testStatus === 'idle' ? 'success' : testStatus;
 
@@ -57,8 +62,60 @@ export function Home() {
         audioStatusClass = 'text-red-400';
     }
 
+    const startRename = () => {
+        setRenameValue(session?.name ?? '');
+        setRenameError(null);
+        setIsRenaming(true);
+    };
+
+    const submitRename = async (e: React.FormEvent) => {
+        e.preventDefault();
+        const name = renameValue.trim();
+        if (!name) return;
+        const failure = await renameChannel(name);
+        if (failure) {
+            setRenameError(failure);
+            return;
+        }
+        setIsRenaming(false);
+    };
+
     return (
         <Layout>
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-6 bg-card/90 border border-line rounded-2xl px-5 py-3">
+                <div className="min-w-0">
+                    <div className="text-xs text-muted uppercase tracking-wider">ช่อง / คอร์ส</div>
+                    {isRenaming ? (
+                        <form onSubmit={submitRename} className="flex items-center gap-2 mt-1">
+                            <input
+                                value={renameValue}
+                                onChange={(e) => setRenameValue(e.target.value)}
+                                maxLength={60}
+                                aria-label="ชื่อช่อง"
+                                className="bg-bg border border-line rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-primary"
+                            />
+                            <button type="submit" className="px-3 py-1.5 rounded-lg bg-primary text-white text-sm font-semibold">บันทึก</button>
+                            <button type="button" onClick={() => setIsRenaming(false)} className="px-3 py-1.5 rounded-lg border border-line text-sm text-muted">ยกเลิก</button>
+                        </form>
+                    ) : (
+                        <div className="flex items-center gap-3">
+                            <span className="text-lg font-bold truncate">{session?.name}</span>
+                            <button type="button" onClick={startRename} className="text-xs text-muted hover:text-fg underline">เปลี่ยนชื่อ</button>
+                        </div>
+                    )}
+                    {renameError && <div role="alert" className="text-xs text-amber-300 mt-1">{renameError}</div>}
+                </div>
+                <div className="flex items-center gap-3">
+                    {!leaseConfirmed && <span className="text-xs text-amber-300">กำลังยืนยันสิทธิ์ช่อง...</span>}
+                    <button
+                        type="button"
+                        onClick={() => void leaveChannel()}
+                        className="px-4 py-2 rounded-lg border border-line text-muted hover:text-fg font-semibold"
+                    >
+                        ออกจากช่องนี้ (ปลดล็อก)
+                    </button>
+                </div>
+            </div>
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 xl:gap-8">
                 <section className="xl:col-span-5 space-y-6">
                     <div className="bg-card/90 backdrop-blur-md border border-line rounded-2xl p-6 xl:p-8 shadow-2xl">

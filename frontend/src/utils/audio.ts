@@ -34,18 +34,38 @@ export function formatAudioName(
     return sanitizeAudioDisplayName(raw, fallback);
 }
 
-export type PlaybackResult = 'audio' | 'beep' | 'failed';
+export type PlaybackResult = 'audio' | 'beep' | 'failed' | 'cancelled';
+
+const activePlaybacks = new Set<() => void>();
+
+export function stopAlarm() {
+    for (const cancel of Array.from(activePlaybacks)) cancel();
+}
 
 export function playAudioFile(url: string): Promise<PlaybackResult> {
     return new Promise((resolve) => {
         const audio = new Audio(url);
         audio.preload = 'auto';
-        audio.onended = () => resolve('audio');
-        audio.onerror = () => resolve('failed');
+
+        const finish = (result: PlaybackResult) => {
+            activePlaybacks.delete(cancel);
+            resolve(result);
+        };
+        const cancel = () => {
+            audio.onended = null;
+            audio.onerror = null;
+            audio.pause();
+            audio.src = '';
+            finish('cancelled');
+        };
+
+        activePlaybacks.add(cancel);
+        audio.onended = () => finish('audio');
+        audio.onerror = () => finish('failed');
 
         const playPromise = audio.play();
         if (playPromise !== undefined) {
-            playPromise.catch(() => resolve('failed'));
+            playPromise.catch(() => finish('failed'));
         }
     });
 }
@@ -79,10 +99,17 @@ export async function playBeepFallback(): Promise<PlaybackResult> {
     playTone(base + 0.32, 0.22, 1174);
 
     return new Promise((resolve) => {
-        window.setTimeout(() => {
-            void ctx.close();
-            resolve('beep');
-        }, 800);
+        let timeoutId = 0;
+        const finish = (result: PlaybackResult) => {
+            activePlaybacks.delete(cancel);
+            window.clearTimeout(timeoutId);
+            void ctx.close().catch(() => undefined);
+            resolve(result);
+        };
+        const cancel = () => finish('cancelled');
+
+        activePlaybacks.add(cancel);
+        timeoutId = window.setTimeout(() => finish('beep'), 800);
     });
 }
 

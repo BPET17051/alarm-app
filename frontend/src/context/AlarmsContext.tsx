@@ -1,5 +1,5 @@
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
-import type { AlarmItem, Template } from '../types';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, type ReactNode } from 'react';
+import type { AlarmItem, ChannelSession, Template } from '../types';
 import * as API from '../services/api';
 import * as Storage from '../services/storage';
 import { playTestAnnouncement, unlockBrowserAudio, type AudioTestLanguage, type AudioTestResult } from '../services/audioTest';
@@ -7,6 +7,9 @@ import { normalizeTime } from '../utils/time';
 
 interface AlarmsContextType {
     items: AlarmItem[];
+    alarmsStatus: 'loading' | 'ready' | 'error';
+    alarmsError: string | null;
+    retryLoadAlarms: () => Promise<void>;
     jobName: string;
     setJobName: (name: string) => void;
     templates: Template[];
@@ -29,8 +32,29 @@ interface AlarmsContextType {
 
 const AlarmsContext = createContext<AlarmsContextType | undefined>(undefined);
 
-export function AlarmsProvider({ children }: { children: ReactNode }) {
+function isLeaseLost(e: unknown) {
+    return e instanceof API.ApiError && (e.status === 409 || (e.status === 404 && e.message === 'Channel not found'));
+}
+
+interface AlarmsProviderProps {
+    children: ReactNode;
+    session: ChannelSession;
+    onLeaseLost: () => void;
+}
+
+export function AlarmsProvider({ children, session, onLeaseLost }: AlarmsProviderProps) {
+    const { channelId, token } = session;
+    const apiSession = useMemo<ChannelSession>(() => ({ channelId, token, name: '' }), [channelId, token]);
+    const failWithLeaseCheck = useCallback((e: unknown) => {
+        if (isLeaseLost(e)) {
+            onLeaseLost();
+            return true;
+        }
+        return false;
+    }, [onLeaseLost]);
     const [items, setItems] = useState<AlarmItem[]>([]);
+    const [alarmsStatus, setAlarmsStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+    const [alarmsError, setAlarmsError] = useState<string | null>(null);
     const [jobName, setJobName] = useState(() => Storage.loadJobName());
     const [templates, setTemplates] = useState<Template[]>([]);
     const [playedDay, setPlayedDay] = useState(() => {
@@ -51,14 +75,20 @@ export function AlarmsProvider({ children }: { children: ReactNode }) {
     const [isAudioEnabled, setIsAudioEnabled] = useState(false);
 
     const loadAlarms = useCallback(async () => {
+        setAlarmsStatus('loading');
+        setAlarmsError(null);
         try {
-            const data = await API.getAlarms();
+            const data = await API.getAlarms(apiSession);
             console.log('Loaded alarms:', data);
             setItems(data);
+            setAlarmsStatus('ready');
         } catch (e: unknown) {
+            if (failWithLeaseCheck(e)) return;
             console.error('Failed to load alarms', e);
+            setAlarmsError('The alarm service could not be reached. The schedule may still contain alarms.');
+            setAlarmsStatus('error');
         }
-    }, []);
+    }, [apiSession, failWithLeaseCheck]);
 
     // Load initial state
     useEffect(() => {
@@ -106,7 +136,7 @@ export function AlarmsProvider({ children }: { children: ReactNode }) {
         try {
             const nextTime = normalizeTime(h, m, s);
             console.log('Adding item:', { ...nextTime, audioId, audioDisplayName });
-            const newItem = await API.createAlarm({ ...nextTime, audioId, audioDisplayName });
+            const newItem = await API.createAlarm(apiSession, { ...nextTime, audioId, audioDisplayName });
             console.log('Added item response:', newItem);
             setItems(prev => {
                 const next = [...prev, newItem].sort((a, b) => (a.h * 3600 + a.m * 60 + a.s) - (b.h * 3600 + b.m * 60 + b.s));
@@ -114,11 +144,12 @@ export function AlarmsProvider({ children }: { children: ReactNode }) {
                 return next;
             });
         } catch (e: unknown) {
+            if (failWithLeaseCheck(e)) return;
             console.error('Failed to add alarm', e);
             const msg = e instanceof Error ? e.message : String(e);
             alert(`Failed to add alarm: ${msg}`);
         }
-    }, []);
+    }, [apiSession, failWithLeaseCheck]);
 
     const updateItem = useCallback(async (id: string, updates: Partial<AlarmItem>) => {
         try {
@@ -130,30 +161,33 @@ export function AlarmsProvider({ children }: { children: ReactNode }) {
                     updates.s ?? currentItem.s
                 )
                 : {};
-            const updated = await API.updateAlarm(id, { ...updates, ...normalizedUpdates });
+            const updated = await API.updateAlarm(apiSession, id, { ...updates, ...normalizedUpdates });
             setItems(prev => prev.map(item => item.id === id ? updated : item).sort((a, b) => (a.h * 3600 + a.m * 60 + a.s) - (b.h * 3600 + b.m * 60 + b.s)));
         } catch (e: unknown) {
+            if (failWithLeaseCheck(e)) return;
             console.error('Failed to update alarm', e);
         }
-    }, [items]);
+    }, [items, apiSession, failWithLeaseCheck]);
 
     const removeItem = useCallback(async (id: string) => {
         try {
-            await API.deleteAlarm(id);
+            await API.deleteAlarm(apiSession, id);
             setItems(prev => prev.filter(item => item.id !== id));
         } catch (e: unknown) {
+            if (failWithLeaseCheck(e)) return;
             console.error('Failed to delete alarm', e);
         }
-    }, []);
+    }, [apiSession, failWithLeaseCheck]);
 
     const clearAll = useCallback(async () => {
         try {
-            await API.clearAlarms();
+            await API.clearAlarms(apiSession);
             setItems([]);
         } catch (e: unknown) {
+            if (failWithLeaseCheck(e)) return;
             console.error('Failed to clear alarms', e);
         }
-    }, []);
+    }, [apiSession, failWithLeaseCheck]);
 
     const markPlayed = useCallback(async (id: string, status: 'SENT' | 'FAILED') => {
         setPlayedIds(prev => {
@@ -165,11 +199,12 @@ export function AlarmsProvider({ children }: { children: ReactNode }) {
         setItems(prev => prev.map(item => item.id === id ? { ...item, notify_status: status } : item));
         // Sync with backend
         try {
-            await API.updateAlarm(id, { notify_status: status });
+            await API.updateAlarm(apiSession, id, { notify_status: status });
         } catch (e: unknown) {
+            if (failWithLeaseCheck(e)) return;
             console.error('Failed to update status', e);
         }
-    }, []);
+    }, [apiSession, failWithLeaseCheck]);
 
     const shiftItems = useCallback(async (ids: string[], deltaSeconds: number) => {
         const idSet = new Set(ids);
@@ -208,7 +243,10 @@ export function AlarmsProvider({ children }: { children: ReactNode }) {
 
     const saveTemplate = useCallback(async (name: string) => {
         try {
-            await API.saveTemplate(name, items);
+            const templateItems = items.map(({ h, m, s, audioId, audioDisplayName }) => ({
+                h, m, s, audioId, audioDisplayName,
+            }));
+            await API.saveTemplate(name, templateItems);
             const tpls = await API.getTemplates();
             setTemplates(tpls);
         } catch (e: unknown) {
@@ -261,6 +299,9 @@ export function AlarmsProvider({ children }: { children: ReactNode }) {
 
     const value = {
         items,
+        alarmsStatus,
+        alarmsError,
+        retryLoadAlarms: loadAlarms,
         jobName,
         setJobName,
         templates,
