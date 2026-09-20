@@ -9,6 +9,16 @@ import { formatAudioName, playAudioFile } from '../utils/audio';
 interface AlarmListProps {
     selected: Set<string>;
     onSelect: (selected: Set<string>) => void;
+    serverTime: Date;
+    playingIds: Set<string>;
+}
+
+// The scheduler only fires an alarm during the 60 seconds after its time (see useScheduler).
+const MISSED_AFTER_SECONDS = 60;
+
+function isMissed(item: AlarmItem, nowSeconds: number, playing: boolean) {
+    if (item.notify_status !== 'PENDING' || playing) return false;
+    return nowSeconds - (item.h * 3600 + item.m * 60 + (item.s || 0)) >= MISSED_AFTER_SECONDS;
 }
 
 function getAlarmThemeClasses(audioDisplayName: string) {
@@ -30,12 +40,14 @@ function getAlarmThemeClasses(audioDisplayName: string) {
     return { accent: '' };
 }
 
-function AlarmTime({ item, mobile = false }: { item: AlarmItem; mobile?: boolean }) {
+function AlarmTime({ item, missed = false, mobile = false }: { item: AlarmItem; missed?: boolean; mobile?: boolean }) {
     const colorClass = item.notify_status === 'SENT'
         ? 'text-green-400'
         : item.notify_status === 'FAILED'
             ? 'text-danger'
-            : 'text-fg';
+            : missed
+                ? 'text-amber-300'
+                : 'text-fg';
 
     return (
         <div className={`${mobile ? 'text-2xl' : 'text-xl'} font-bold tabular-nums transition-colors ${colorClass}`}>
@@ -48,33 +60,39 @@ function AlarmTime({ item, mobile = false }: { item: AlarmItem; mobile?: boolean
     );
 }
 
-function AlarmStatus({ item, mobile = false }: { item: AlarmItem; mobile?: boolean }) {
-    if (item.notify_status === 'PENDING') {
+function AlarmStatus({ item, missed = false, playing = false, mobile = false }: { item: AlarmItem; missed?: boolean; playing?: boolean; mobile?: boolean }) {
+    if (item.notify_status === 'PENDING' && !missed && !playing) {
         return null;
     }
 
-    const badgeClass = item.notify_status === 'SENT'
-        ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-        : 'bg-danger/20 text-danger border border-danger/30';
+    const state = playing ? 'playing' : missed ? 'missed' : item.notify_status === 'SENT' ? 'sent' : 'failed';
+    const badgeClass = {
+        playing: 'bg-sky-500/20 text-sky-300 border border-sky-500/30',
+        missed: 'bg-amber-500/20 text-amber-300 border border-amber-500/40',
+        sent: 'bg-green-500/20 text-green-400 border border-green-500/30',
+        failed: 'bg-danger/20 text-danger border border-danger/30',
+    }[state];
+    const label = { playing: 'กำลังเล่น', missed: 'พลาดเวลา', sent: 'เล่นแล้ว', failed: 'ล้มเหลว' }[state];
 
     return (
-        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${badgeClass}`}>
-            {!mobile && item.notify_status === 'SENT' && (
+        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-bold ${badgeClass}`}>
+            {!mobile && state === 'sent' && (
                 <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"></path>
                 </svg>
             )}
-            {!mobile && item.notify_status === 'FAILED' && (
+            {!mobile && (state === 'failed' || state === 'missed') && (
                 <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd"></path>
                 </svg>
             )}
-            {item.notify_status === 'SENT' ? 'เล่นแล้ว' : 'ล้มเหลว'}
+            {label}
         </span>
     );
 }
 
-export function AlarmList({ selected, onSelect }: AlarmListProps) {
+export function AlarmList({ selected, onSelect, serverTime, playingIds }: AlarmListProps) {
+    const nowSeconds = serverTime.getHours() * 3600 + serverTime.getMinutes() * 60 + serverTime.getSeconds();
     const { items, alarmsStatus, alarmsError, retryLoadAlarms, removeItem, updateItem, addItem } = useAlarms();
     const [editingAlarm, setEditingAlarm] = useState<AlarmItem | null>(null);
     const [playingId, setPlayingId] = useState<string | null>(null);
@@ -275,8 +293,16 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
         );
     }
 
+    const missedCount = items.filter((item) => isMissed(item, nowSeconds, playingIds.has(item.id))).length;
+
     return (
         <div className="space-y-3">
+            {missedCount > 0 && (
+                <div role="alert" className="rounded-xl border border-amber-500/50 bg-amber-500/10 px-4 py-3 text-amber-200">
+                    <div className="font-bold">มี {missedCount} รายการเลยเวลาแล้วแต่ยังไม่ได้เล่น</div>
+                    <div className="text-sm">ตรวจสอบว่าประกาศไปแล้วหรือยัง แล้วประกาศเองหากจำเป็น</div>
+                </div>
+            )}
             <div className="hidden md:flex sticky top-0 bg-card/95 backdrop-blur-sm z-10 items-center gap-4 px-4 py-3 text-xs font-bold text-muted/70 uppercase tracking-wider border-b border-line/50">
                 <div className="w-9 flex items-center justify-center">
                     <input
@@ -314,6 +340,8 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                 {items.map((item, index) => {
                     const audioDisplay = formatAudioName(item.audioDisplayName);
                     const theme = getAlarmThemeClasses(audioDisplay);
+                    const missed = isMissed(item, nowSeconds, playingIds.has(item.id));
+                    const playing = playingIds.has(item.id);
                     const desktopMenuDirection: 'up' | 'down' =
                         items.length <= 2 || index >= items.length - 2 ? 'up' : 'down';
 
@@ -338,7 +366,7 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                                     />
                                 </div>
                                 <div className="shrink-0">
-                                    <AlarmTime item={item} />
+                                    <AlarmTime item={item} missed={missed} />
                                 </div>
                                 <div className="min-w-0">
                                     <div className="flex items-start gap-3 min-w-0">
@@ -354,7 +382,7 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                                     </div>
                                 </div>
                                 <div className="text-right shrink-0">
-                                    <AlarmStatus item={item} />
+                                    <AlarmStatus item={item} missed={missed} playing={playing} />
                                 </div>
                                 <div className="shrink-0 relative">
                                     {renderActions(item, false, desktopMenuDirection)}
@@ -373,10 +401,10 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                                                 aria-label={`เลือกรายการเวลา ${item.h}:${item.m}:${item.s}`}
                                             />
                                         </div>
-                                        <AlarmTime item={item} mobile />
+                                        <AlarmTime item={item} missed={missed} mobile />
                                     </div>
                                     <div className="shrink-0 pt-1">
-                                        <AlarmStatus item={item} mobile />
+                                        <AlarmStatus item={item} missed={missed} playing={playing} mobile />
                                     </div>
                                 </div>
                                 <div className="pl-12 min-w-0">

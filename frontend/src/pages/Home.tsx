@@ -31,7 +31,7 @@ export function Home() {
         syncPlaybackDay(dayKey);
     }, [dayKey, syncPlaybackDay]);
 
-    useScheduler(items, playedIds, markPlayed, dayKey, serverTime, leaseConfirmed);
+    const { playingIds } = useScheduler(items, playedIds, markPlayed, dayKey, serverTime, leaseConfirmed);
 
     const startRename = () => {
         setRenameValue(session?.name ?? '');
@@ -129,6 +129,8 @@ export function Home() {
                         </div>
                         <div className="flex-1 overflow-auto">
                             <AlarmList
+                                serverTime={serverTime}
+                                playingIds={playingIds}
                                 selected={selected}
                                 onSelect={(ids) => setSelectedState({ dayKey, ids })}
                             />

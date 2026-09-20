@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { AlarmItem } from '../types';
 import * as API from '../services/api';
 import { playAlarm, stopAlarm } from '../utils/audio';
@@ -12,6 +12,7 @@ export function useScheduler(
     enabled = true
 ) {
     const triggeredAlarms = useRef<Set<string>>(new Set());
+    const [playingIds, setPlayingIds] = useState<Set<string>>(new Set());
 
     useEffect(() => {
         triggeredAlarms.current.clear();
@@ -44,6 +45,7 @@ export function useScheduler(
                     // Lock immediately
                     triggeredAlarms.current.add(item.id);
 
+                    setPlayingIds((prev) => new Set(prev).add(item.id));
                     // Play audio even when the ready indicator is false. The playback result decides status.
                     try {
                         const audioUrl = item.audioId ? API.getAudioUrl(item.audioId) : null;
@@ -53,6 +55,12 @@ export function useScheduler(
                     } catch (e) {
                         console.error(e);
                         markPlayed(item.id, 'FAILED');
+                    } finally {
+                        setPlayingIds((prev) => {
+                            const next = new Set(prev);
+                            next.delete(item.id);
+                            return next;
+                        });
                     }
                 }
             });
@@ -63,4 +71,6 @@ export function useScheduler(
 
         return () => clearInterval(interval);
     }, [items, playedIds, markPlayed, serverTime, enabled]);
+
+    return { playingIds };
 }
