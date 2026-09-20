@@ -7,7 +7,7 @@ import type { Channel } from '../types';
 const POLL_INTERVAL_MS = 4000;
 
 export function ChannelPicker() {
-    const { channels, notice, refreshChannels, selectChannel, createChannel, deleteChannel } = useChannel();
+    const { channels, channelsStatus, notice, refreshChannels, retryChannels, selectChannel, createChannel, deleteChannel } = useChannel();
     const [newName, setNewName] = useState('');
     const [isCreating, setIsCreating] = useState(false);
     const [pendingDelete, setPendingDelete] = useState<Channel | null>(null);
@@ -47,8 +47,29 @@ export function ChannelPicker() {
                     </div>
                 )}
 
+                {channelsStatus === 'error' && (
+                    <div role="alert" className="rounded-lg border border-danger/50 bg-danger/10 px-4 py-3">
+                        <div className="font-semibold text-danger">
+                            โหลดรายการช่องไม่สำเร็จ{channels.length > 0 ? ' — ข้อมูลที่เห็นอาจไม่ล่าสุด' : ''}
+                        </div>
+                        <div className="text-sm text-muted mt-1">
+                            เซิร์ฟเวอร์อาจกำลังเริ่มทำงานหรือเน็ตมีปัญหา ระบบจะลองใหม่เองทุก 4 วินาที อย่าเพิ่งสร้างช่องใหม่
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => void retryChannels()}
+                            className="mt-3 px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white font-semibold"
+                        >
+                            ลองใหม่
+                        </button>
+                    </div>
+                )}
+
                 <ul className="space-y-3" aria-label="รายการช่อง">
-                    {channels.length === 0 && (
+                    {channelsStatus === 'loading' && channels.length === 0 && (
+                        <li role="status" className="text-sm text-muted">กำลังโหลดรายการช่อง...</li>
+                    )}
+                    {channelsStatus === 'ready' && channels.length === 0 && (
                         <li className="text-sm text-muted">ยังไม่มีช่อง สร้างช่องแรกด้านล่าง</li>
                     )}
                     {channels.map((channel) => (
@@ -97,7 +118,7 @@ export function ChannelPicker() {
                     />
                     <button
                         type="submit"
-                        disabled={isCreating || !newName.trim()}
+                        disabled={isCreating || channelsStatus !== 'ready' || !newName.trim()}
                         className="px-5 py-3 rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 text-white font-bold"
                     >
                         สร้างช่อง

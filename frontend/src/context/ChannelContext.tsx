@@ -15,14 +15,17 @@ const LEASE_GIVE_UP_MS = 28_000;
 const PROBE_WAIT_MS = 150;
 
 type ChannelStatus = 'checking' | 'idle' | 'active';
+type ChannelsLoadStatus = 'loading' | 'ready' | 'error';
 
 interface ChannelContextType {
     status: ChannelStatus;
     session: ChannelSession | null;
     leaseConfirmed: boolean;
     channels: Channel[];
+    channelsStatus: ChannelsLoadStatus;
     notice: string | null;
     refreshChannels: () => Promise<void>;
+    retryChannels: () => Promise<void>;
     selectChannel: (channel: Channel) => Promise<void>;
     createChannel: (name: string) => Promise<boolean>;
     deleteChannel: (channel: Channel) => Promise<void>;
@@ -42,6 +45,7 @@ export function ChannelProvider({ children }: { children: ReactNode }) {
     const [session, setSession] = useState<ChannelSession | null>(null);
     const [leaseConfirmed, setLeaseConfirmed] = useState(false);
     const [channels, setChannels] = useState<Channel[]>([]);
+    const [channelsStatus, setChannelsStatus] = useState<ChannelsLoadStatus>('loading');
     const [notice, setNotice] = useState<string | null>(null);
     const sessionRef = useRef<ChannelSession | null>(null);
     const lastRenewOkRef = useRef(0);
@@ -69,10 +73,17 @@ export function ChannelProvider({ children }: { children: ReactNode }) {
     const refreshChannels = useCallback(async () => {
         try {
             setChannels(await API.getChannels());
+            setChannelsStatus('ready');
         } catch (e) {
             console.error('Failed to load channels', e);
+            setChannelsStatus('error');
         }
     }, []);
+
+    const retryChannels = useCallback(async () => {
+        setChannelsStatus('loading');
+        await refreshChannels();
+    }, [refreshChannels]);
 
     // Answer probes from a duplicated tab (which clones sessionStorage) while we own a channel.
     useEffect(() => {
@@ -239,15 +250,17 @@ export function ChannelProvider({ children }: { children: ReactNode }) {
         session,
         leaseConfirmed,
         channels,
+        channelsStatus,
         notice,
         refreshChannels,
+        retryChannels,
         selectChannel,
         createChannel,
         deleteChannel,
         renameChannel,
         leaveChannel,
         handleLeaseLost,
-    }), [status, session, leaseConfirmed, channels, notice, refreshChannels, selectChannel, createChannel, deleteChannel, renameChannel, leaveChannel, handleLeaseLost]);
+    }), [status, session, leaseConfirmed, channels, channelsStatus, notice, refreshChannels, retryChannels, selectChannel, createChannel, deleteChannel, renameChannel, leaveChannel, handleLeaseLost]);
 
     return <ChannelContext.Provider value={value}>{children}</ChannelContext.Provider>;
 }
