@@ -52,7 +52,7 @@ export function AlarmForm() {
         } catch (e: unknown) {
             console.error('Operation failed', e);
             const msg = e instanceof Error ? e.message : String(e);
-            alert(`Failed: ${msg}`);
+            alert(`บันทึกไม่สำเร็จ: ${msg}`);
         } finally {
             setIsSubmitting(false);
         }
@@ -75,11 +75,11 @@ export function AlarmForm() {
     };
 
     const getSelectionDisplay = () => {
-        if (!audioSelection) return 'Default Alarm Sound';
+        if (!audioSelection) return 'เสียงเตือนมาตรฐาน';
         if (audioSelection.source === 'upload') {
-            return `Upload: ${audioSelection.displayName || audioSelection.file.name}`;
+            return `อัปโหลด: ${audioSelection.displayName || audioSelection.file.name}`;
         }
-        return `Selected: ${audioSelection.displayName}`;
+        return `เลือกแล้ว: ${audioSelection.displayName}`;
     };
 
     return (
@@ -87,13 +87,13 @@ export function AlarmForm() {
             <form onSubmit={handleSubmit} className="space-y-6">
                 {/* Time Input Section */}
                 <div>
-                    <label className="block text-sm font-bold text-muted mb-3 uppercase tracking-wider">
-                        Set Time
-                    </label>
+                    <h3 className="block text-sm font-bold text-muted mb-3 tracking-wider">
+                        ขั้นที่ 1 · ตั้งเวลา
+                    </h3>
                     <div className="bg-bg-soft/50 border border-line/50 rounded-xl p-4">
                         <div className="grid grid-cols-3 gap-3">
                             <div className="flex flex-col">
-                                <label htmlFor="hours" className="text-xs font-semibold text-muted/70 mb-1 text-center uppercase tracking-wide">Hours</label>
+                                <label htmlFor="hours" className="text-xs font-semibold text-muted/70 mb-1 text-center uppercase tracking-wide">ชั่วโมง</label>
                                 <input
                                     id="hours" type="number" min="0" max="23" value={h}
                                     onChange={e => handleTimeChange('h', e.target.value)}
@@ -101,7 +101,7 @@ export function AlarmForm() {
                                 />
                             </div>
                             <div className="flex flex-col">
-                                <label htmlFor="minutes" className="text-xs font-semibold text-muted/70 mb-1 text-center uppercase tracking-wide">Minutes</label>
+                                <label htmlFor="minutes" className="text-xs font-semibold text-muted/70 mb-1 text-center uppercase tracking-wide">นาที</label>
                                 <input
                                     id="minutes" type="number" min="0" max="59" value={m}
                                     onChange={e => handleTimeChange('m', e.target.value)}
@@ -109,7 +109,7 @@ export function AlarmForm() {
                                 />
                             </div>
                             <div className="flex flex-col">
-                                <label htmlFor="seconds" className="text-xs font-semibold text-muted/70 mb-1 text-center uppercase tracking-wide">Seconds</label>
+                                <label htmlFor="seconds" className="text-xs font-semibold text-muted/70 mb-1 text-center uppercase tracking-wide">วินาที</label>
                                 <input
                                     id="seconds" type="number" min="0" max="59" value={s}
                                     onChange={e => handleTimeChange('s', e.target.value)}
@@ -122,9 +122,9 @@ export function AlarmForm() {
 
                 {/* Audio Source Trigger */}
                 <div>
-                    <label className="block text-sm font-bold text-muted mb-3 uppercase tracking-wider">
-                        Audio Source
-                    </label>
+                    <h3 className="block text-sm font-bold text-muted mb-3 tracking-wider">
+                        ขั้นที่ 2 · เลือกไฟล์เสียง
+                    </h3>
 
                     <div
                         onClick={() => setIsModalOpen(true)}
@@ -142,7 +142,7 @@ export function AlarmForm() {
                                         {getSelectionDisplay()}
                                     </span>
                                     <span className="text-xs text-muted truncate">
-                                        {audioSelection ? (audioSelection.source === 'upload' ? 'Ready to upload' : 'Selected from library') : 'Click to choose custom audio'}
+                                        {audioSelection ? (audioSelection.source === 'upload' ? 'พร้อมอัปโหลดเมื่อกดเพิ่ม' : 'เลือกจากคลังเสียงแล้ว') : 'กดเพื่อเลือกไฟล์เสียง'}
                                     </span>
                                 </div>
                             </div>
@@ -154,6 +154,9 @@ export function AlarmForm() {
                 </div>
 
                 {/* Submit Button */}
+                <h3 className="text-sm font-bold text-muted tracking-wider -mb-3">
+                    ขั้นที่ 3 · เพิ่มเข้าตารางประกาศ
+                </h3>
                 <button
                     type="submit"
                     disabled={!isValid || isSubmitting}
@@ -165,21 +168,21 @@ export function AlarmForm() {
                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                             </svg>
-                            Saving...
+                            กำลังบันทึก...
                         </>
                     ) : showSuccess ? (
                         <>
                             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
                             </svg>
-                            Added!
+                            เพิ่มแล้ว!
                         </>
                     ) : (
                         <>
                             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"></path>
                             </svg>
-                            Add Alarm
+                            เพิ่มรายการประกาศ
                         </>
                     )}
                 </button>

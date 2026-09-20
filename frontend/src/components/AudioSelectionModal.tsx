@@ -79,7 +79,7 @@ export function AudioSelectionModal({
         const audioFile = audioFiles.find(f => f.id === fileId);
         const displayName = audioFile?.displayName || fileId;
 
-        if (!confirm(`Are you sure you want to delete "${displayName}"?`)) return;
+        if (!confirm(`ลบไฟล์เสียง "${displayName}" ออกจากคลังถาวรหรือไม่?`)) return;
 
         try {
             await API.deleteAudio(fileId);
@@ -91,7 +91,7 @@ export function AudioSelectionModal({
             }
         } catch (error) {
             console.error('Failed to delete audio', error);
-            alert('Failed to delete audio file');
+            alert('ลบไฟล์เสียงไม่สำเร็จ');
         }
     };
 
@@ -123,13 +123,14 @@ export function AudioSelectionModal({
                 <button
                     onClick={onClose}
                     className="absolute top-4 right-4 text-muted hover:text-fg transition-colors"
+                    aria-label="ปิด"
                 >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
                     </svg>
                 </button>
 
-                <h2 className="text-xl font-bold mb-6">Choose Audio Source</h2>
+                <h2 className="text-xl font-bold mb-6">เลือกไฟล์เสียง</h2>
 
                 {/* Tabs */}
                 <div className="bg-bg-soft/50 border border-line rounded-xl p-1 flex mb-6">
@@ -138,7 +139,7 @@ export function AudioSelectionModal({
                         onClick={() => setActiveTab('select')}
                         className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${activeTab === 'select' ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-muted hover:text-fg'}`}
                     >
-                        Select Existing
+                        เลือกจากคลังเสียง
                     </button>
                     {allowUpload && (
                         <button
@@ -146,7 +147,7 @@ export function AudioSelectionModal({
                             onClick={() => setActiveTab('upload')}
                             className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${activeTab === 'upload' ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-muted hover:text-fg'}`}
                         >
-                            Upload New
+                            อัปโหลดไฟล์ใหม่
                         </button>
                     )}
                 </div>
@@ -156,10 +157,10 @@ export function AudioSelectionModal({
                     {activeTab === 'select' || !allowUpload ? (
                         <div className="space-y-4">
                             {isLoadingAudio ? (
-                                <div className="text-center py-8 text-muted text-sm">Loading audio files...</div>
+                                <div className="text-center py-8 text-muted text-sm">กำลังโหลดรายการไฟล์เสียง...</div>
                             ) : audioFiles.length === 0 ? (
                                 <div className="text-center py-8 text-muted text-sm border border-dashed border-line rounded-lg">
-                                    No audio files found.
+                                    ยังไม่มีไฟล์เสียงในคลัง
                                 </div>
                             ) : (
                                 <div className="border border-line rounded-lg max-h-60 overflow-y-auto bg-bg-soft/30 p-2 space-y-1 custom-scrollbar">
@@ -191,7 +192,7 @@ export function AudioSelectionModal({
                                                     type="button"
                                                     onClick={(e) => handleDeleteAudio(e, audio.id)}
                                                     className="p-1.5 hover:bg-red-500/20 text-muted hover:text-red-500 rounded transition-all"
-                                                    title="Delete file"
+                                                    title="ลบไฟล์" aria-label="ลบไฟล์เสียง"
                                                 >
                                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -229,14 +230,14 @@ export function AudioSelectionModal({
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
                                         </svg>
                                         <div className="truncate max-w-[200px]">{uploadFile.name}</div>
-                                        <span className="text-xs text-muted font-normal">Click to change</span>
+                                        <span className="text-xs text-muted font-normal">กดเพื่อเปลี่ยนไฟล์</span>
                                     </div>
                                 ) : (
                                     <div className="text-muted flex flex-col items-center gap-2">
                                         <svg className="w-8 h-8 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                                         </svg>
-                                        <span>Click to browse audio file</span>
+                                        <span>กดเพื่อเลือกไฟล์เสียงจากเครื่อง</span>
                                     </div>
                                 )}
                             </div>
@@ -244,7 +245,7 @@ export function AudioSelectionModal({
                             {uploadFile && (
                                 <div>
                                     <label htmlFor="audio-name" className="block text-xs font-bold text-muted mb-1 uppercase tracking-wider">
-                                        Display Name
+                                        ชื่อที่แสดงในตาราง
                                     </label>
                                     <input
                                         id="audio-name"
@@ -252,11 +253,11 @@ export function AudioSelectionModal({
                                         value={uploadDisplayName}
                                         maxLength={AUDIO_DISPLAY_NAME_MAX_LENGTH}
                                         onChange={e => setUploadDisplayName(sanitizeAudioDisplayName(e.target.value, ''))}
-                                        placeholder="e.g. Morning Alert"
+                                        placeholder="เช่น เตือนเข้าห้องสอบ"
                                         className="w-full bg-bg-soft border border-line rounded-lg p-3 text-sm outline-none focus:border-primary transition-all"
                                     />
                                     <p className="text-xs text-muted/50 mt-2">
-                                        Used in the schedule list. Max {AUDIO_DISPLAY_NAME_MAX_LENGTH} characters.
+                                        ใช้แสดงในตารางประกาศ ยาวได้สูงสุด {AUDIO_DISPLAY_NAME_MAX_LENGTH} ตัวอักษร
                                     </p>
                                 </div>
                             )}
@@ -269,14 +270,14 @@ export function AudioSelectionModal({
                         onClick={onClose}
                         className="px-4 py-2 text-sm font-bold text-muted hover:text-fg transition-colors"
                     >
-                        Cancel
+                        ยกเลิก
                     </button>
                     <button
                         onClick={handleConfirm}
                         disabled={activeTab === 'upload' ? !uploadFile : !selectedId}
                         className="bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold px-6 py-2 rounded-xl shadow-lg shadow-primary/25 transition-all transform active:scale-[0.98]"
                     >
-                        Confirm Selection
+                        ยืนยันการเลือก
                     </button>
                 </div>
             </div>

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Layout } from '../components/Layout';
 import { useChannel } from '../context/ChannelContext';
+import { ConfirmDialog } from '../components/ConfirmDialog';
+import type { Channel } from '../types';
 
 const POLL_INTERVAL_MS = 4000;
 
@@ -8,6 +10,7 @@ export function ChannelPicker() {
     const { channels, notice, refreshChannels, selectChannel, createChannel, deleteChannel } = useChannel();
     const [newName, setNewName] = useState('');
     const [isCreating, setIsCreating] = useState(false);
+    const [pendingDelete, setPendingDelete] = useState<Channel | null>(null);
 
     useEffect(() => {
         void refreshChannels();
@@ -25,19 +28,16 @@ export function ChannelPicker() {
         if (created) setNewName('');
     };
 
-    const handleDelete = (id: string, name: string) => {
-        if (!window.confirm(`ลบช่อง "${name}" ?`)) return;
-        const channel = channels.find((c) => c.id === id);
-        if (channel) void deleteChannel(channel);
-    };
-
     return (
         <Layout>
             <div className="max-w-2xl mx-auto bg-card/90 backdrop-blur-md border border-line rounded-2xl p-6 xl:p-8 shadow-2xl space-y-6">
                 <div>
                     <h1 className="text-2xl font-bold">เลือกคอร์ส / ช่องประกาศ</h1>
                     <p className="text-sm text-muted mt-1">
-                        เมื่อเลือกแล้วเครื่องนี้จะถูกล็อกไว้กับช่องนั้น จนกว่าจะกด &quot;ออกจากช่องนี้&quot;
+                        เมื่อเลือกแล้วเครื่องนี้จะถูกล็อกไว้กับช่องนั้น และเครื่องอื่นจะเลือกช่องเดียวกันไม่ได้ จนกว่าจะกด &quot;ออกจากช่องนี้&quot;
+                    </p>
+                    <p className="text-sm text-muted mt-1">
+                        หากเครื่องดับหรือเน็ตหลุด ช่องจะว่างอีกครั้งภายในประมาณ 30 วินาที
                     </p>
                 </div>
 
@@ -59,7 +59,7 @@ export function ChannelPicker() {
                             <div className="min-w-0">
                                 <div className="font-semibold truncate">{channel.name}</div>
                                 <div className={`text-xs ${channel.locked ? 'text-amber-300' : 'text-green-400'}`}>
-                                    {channel.locked ? 'กำลังถูกใช้งาน' : 'ว่าง'}
+                                    {channel.locked ? 'มีเครื่องอื่นใช้อยู่ — เลือกไม่ได้ตอนนี้' : 'ว่าง — กดเลือกเพื่อเริ่มใช้งาน'}
                                 </div>
                             </div>
                             <div className="flex items-center gap-2 shrink-0">
@@ -73,7 +73,7 @@ export function ChannelPicker() {
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={() => handleDelete(channel.id, channel.name)}
+                                    onClick={() => setPendingDelete(channel)}
                                     disabled={channel.locked}
                                     className="px-3 py-2 rounded-lg border border-line text-muted hover:text-fg disabled:opacity-40 disabled:cursor-not-allowed"
                                     aria-label={`ลบช่อง ${channel.name}`}
@@ -104,6 +104,19 @@ export function ChannelPicker() {
                     </button>
                 </form>
             </div>
+
+            <ConfirmDialog
+                open={pendingDelete !== null}
+                title={`ลบช่อง "${pendingDelete?.name ?? ''}" ?`}
+                description="ช่องนี้จะถูกลบถาวร ลบได้เฉพาะช่องที่ว่างและไม่มีรายการประกาศเหลืออยู่"
+                confirmLabel="ลบช่อง"
+                onCancel={() => setPendingDelete(null)}
+                onConfirm={() => {
+                    const channel = pendingDelete;
+                    setPendingDelete(null);
+                    if (channel) void deleteChannel(channel);
+                }}
+            />
         </Layout>
     );
 }

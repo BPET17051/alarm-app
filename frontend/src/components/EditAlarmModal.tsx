@@ -66,27 +66,27 @@ export function EditAlarmModal({ alarm, isOpen, onClose, onUpdate }: EditAlarmMo
     };
 
     const getSelectionDisplay = () => {
-        if (!audioSelection || audioSelection.source !== 'select') return 'Default Alarm Sound';
-        return `Selected: ${audioSelection.displayName}`;
+        if (!audioSelection || audioSelection.source !== 'select') return 'เสียงเตือนมาตรฐาน';
+        return `เลือกแล้ว: ${audioSelection.displayName}`;
     };
 
     return (
         <>
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
                 <div className="bg-card border border-line rounded-2xl w-full max-w-md p-6 shadow-2xl animate-scale-in">
-                    <h2 className="text-xl font-bold text-fg mb-6">Edit Alarm</h2>
+                    <h2 className="text-xl font-bold text-fg mb-6">แก้ไขรายการประกาศ</h2>
 
                     <form onSubmit={handleSubmit} className="space-y-6">
                         {/* Time Input Section */}
                         <div>
                             <label className="block text-sm font-bold text-muted mb-3 uppercase tracking-wider">
-                                Set Time
+                                เวลา
                             </label>
                             <div className="bg-bg-soft/50 border border-line/50 rounded-xl p-4">
                                 <div className="grid grid-cols-3 gap-3">
                                     <div className="flex flex-col">
                                         <label htmlFor="edit-hours" className="text-xs font-semibold text-muted/70 mb-1 text-center uppercase tracking-wide">
-                                            Hours
+                                            ชั่วโมง
                                         </label>
                                         <input
                                             id="edit-hours"
@@ -101,7 +101,7 @@ export function EditAlarmModal({ alarm, isOpen, onClose, onUpdate }: EditAlarmMo
 
                                     <div className="flex flex-col">
                                         <label htmlFor="edit-minutes" className="text-xs font-semibold text-muted/70 mb-1 text-center uppercase tracking-wide">
-                                            Minutes
+                                            นาที
                                         </label>
                                         <input
                                             id="edit-minutes"
@@ -116,7 +116,7 @@ export function EditAlarmModal({ alarm, isOpen, onClose, onUpdate }: EditAlarmMo
 
                                     <div className="flex flex-col">
                                         <label htmlFor="edit-seconds" className="text-xs font-semibold text-muted/70 mb-1 text-center uppercase tracking-wide">
-                                            Seconds
+                                            วินาที
                                         </label>
                                         <input
                                             id="edit-seconds"
@@ -134,7 +134,7 @@ export function EditAlarmModal({ alarm, isOpen, onClose, onUpdate }: EditAlarmMo
 
                         <div>
                             <label className="block text-sm font-bold text-muted mb-3 uppercase tracking-wider">
-                                Audio Source
+                                ไฟล์เสียง
                             </label>
                             <div
                                 onClick={() => setIsAudioModalOpen(true)}
@@ -152,7 +152,7 @@ export function EditAlarmModal({ alarm, isOpen, onClose, onUpdate }: EditAlarmMo
                                                 {getSelectionDisplay()}
                                             </span>
                                             <span className="text-xs text-muted truncate">
-                                                {audioSelection ? 'Selected from library' : 'Click to choose audio from the system library'}
+                                                {audioSelection ? 'เลือกจากคลังเสียงแล้ว' : 'กดเพื่อเลือกไฟล์เสียงจากคลังของระบบ'}
                                             </span>
                                         </div>
                                     </div>
@@ -163,11 +163,11 @@ export function EditAlarmModal({ alarm, isOpen, onClose, onUpdate }: EditAlarmMo
                             </div>
                             {alarm.audioDisplayName && !audioSelection && (
                                 <p className="mt-2 text-xs text-muted/70">
-                                    Current audio: {alarm.audioDisplayName}
+                                    ไฟล์เสียงปัจจุบัน: {alarm.audioDisplayName}
                                 </p>
                             )}
                             <p className="mt-2 text-xs text-muted/60">
-                                Editing uses only audio already uploaded to the system.
+                                การแก้ไขเลือกได้เฉพาะไฟล์เสียงที่อัปโหลดไว้ในระบบแล้ว
                             </p>
                         </div>
 
@@ -177,14 +177,14 @@ export function EditAlarmModal({ alarm, isOpen, onClose, onUpdate }: EditAlarmMo
                                 onClick={onClose}
                                 className="flex-1 px-4 py-3 rounded-xl border border-line text-muted hover:bg-bg-soft transition-colors font-semibold"
                             >
-                                Cancel
+                                ยกเลิก
                             </button>
                             <button
                                 type="submit"
                                 disabled={!isValid}
                                 className="flex-1 bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-xl transition-all shadow-lg shadow-primary/25 hover:shadow-primary/40"
                             >
-                                Save Changes
+                                บันทึกการแก้ไข
                             </button>
                         </div>
                     </form>

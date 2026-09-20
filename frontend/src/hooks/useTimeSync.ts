@@ -7,8 +7,10 @@ interface TimeSyncState {
     offset: number;
     /** Whether currently syncing with server */
     isSyncing: boolean;
-    /** Error message if sync failed */
+    /** Error message if the latest sync failed */
     error: string | null;
+    /** True only after at least one successful sync and the latest sync did not fail */
+    synced: boolean;
 }
 
 const SYNC_INTERVAL = 30 * 1000; // Re-sync every 30 seconds
@@ -18,6 +20,7 @@ export function useTimeSync(): TimeSyncState {
     const [offset, setOffset] = useState(0);
     const [isSyncing, setIsSyncing] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [hasSynced, setHasSynced] = useState(false);
     const [currentTime, setCurrentTime] = useState(new Date());
     const syncIntervalRef = useRef<number | undefined>(undefined);
     const clockIntervalRef = useRef<number | undefined>(undefined);
@@ -30,7 +33,6 @@ export function useTimeSync(): TimeSyncState {
 
         isSyncingRef.current = true;
         setIsSyncing(true);
-        setError(null);
 
         try {
             const startTime = Date.now();
@@ -53,12 +55,14 @@ export function useTimeSync(): TimeSyncState {
             const calculatedOffset = localTime - adjustedServerTime;
 
             setOffset(calculatedOffset);
+            setError(null);
+            setHasSynced(true);
             console.log(`Time sync successful. Offset: ${(calculatedOffset / 1000).toFixed(1)}s (${calculatedOffset > 0 ? 'local ahead' : 'local behind'})`);
         } catch {
             // If sync fails, just log it debug and use local time (offset 0)
             console.debug('Time sync unavailable, using local device time.');
-            // We don't set 'error' state to avoid showing scary messages to the user
-            // since falling back to local time is the desired behavior for them.
+            // Keep running on the device clock, but record the failure so the UI never claims a verified clock.
+            setError('Time sync unavailable');
         } finally {
             isSyncingRef.current = false;
             setIsSyncing(false);
@@ -118,6 +122,7 @@ export function useTimeSync(): TimeSyncState {
         serverTime,
         offset,
         isSyncing,
-        error
+        error,
+        synced: hasSynced && error === null
     };
 }

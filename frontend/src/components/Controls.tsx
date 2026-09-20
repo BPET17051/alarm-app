@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAlarms } from '../hooks/useAlarms';
+import { ConfirmDialog } from './ConfirmDialog';
 
 interface ControlsProps {
     selected: Set<string>;
@@ -26,25 +27,25 @@ export function Controls({ selected }: ControlsProps) {
                         onClick={() => setShowShift(true)}
                         disabled={selected.size === 0}
                         className="px-4 py-2.5 rounded-lg border border-line hover:bg-white/5 hover:border-primary/50 transition-all text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
-                        title={selected.size === 0 ? 'Select alarms to shift' : `Shift ${selected.size} alarm(s)`}
-                        aria-label="Shift selected alarms"
+                        title={selected.size === 0 ? 'เลือกรายการที่ต้องการเลื่อนเวลาก่อน' : `เลื่อนเวลา ${selected.size} รายการ`}
+                        aria-label="เลื่อนเวลารายการที่เลือก"
                     >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path>
                         </svg>
-                        Shift Time
+                        เลื่อนเวลา
                     </button>
                     <button
                         onClick={() => setShowEqualize(true)}
                         disabled={selected.size < 2}
                         className="px-4 py-2.5 rounded-lg border border-line hover:bg-white/5 hover:border-primary/50 transition-all text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
-                        title={selected.size < 2 ? 'Select 2+ alarms to equalize' : `Equalize ${selected.size} alarm(s)`}
-                        aria-label="Equalize gaps between selected alarms"
+                        title={selected.size < 2 ? 'เลือกอย่างน้อย 2 รายการก่อน' : `จัดระยะห่าง ${selected.size} รายการ`}
+                        aria-label="จัดระยะห่างเท่ากันระหว่างรายการที่เลือก"
                     >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"></path>
                         </svg>
-                        Equalize Gaps
+                        จัดระยะห่างเท่ากัน
                     </button>
                 </div>
 
@@ -54,80 +55,48 @@ export function Controls({ selected }: ControlsProps) {
                     <button
                         onClick={() => setShowLoad(true)}
                         className="px-4 py-2.5 rounded-lg border border-line hover:bg-white/5 hover:border-primary/50 transition-all text-sm font-semibold flex items-center gap-2"
-                        aria-label="Load template"
+                        aria-label="โหลดเทมเพลต"
                     >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"></path>
                         </svg>
-                        Load Template
+                        โหลดเทมเพลต
                     </button>
                     <button
                         onClick={() => setShowSave(true)}
                         className="px-4 py-2.5 rounded-lg border border-line hover:bg-white/5 hover:border-primary/50 transition-all text-sm font-semibold flex items-center gap-2"
-                        aria-label="Save as template"
+                        aria-label="บันทึกเป็นเทมเพลต"
                     >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path>
                         </svg>
-                        Save Template
+                        บันทึกเทมเพลต
                     </button>
                 </div>
 
                 <button
                     onClick={() => setShowClearConfirmation(true)}
                     className="ml-auto px-4 py-2.5 rounded-lg border border-danger/50 text-danger hover:bg-danger/10 hover:border-danger transition-all text-sm font-semibold flex items-center gap-2"
-                    aria-label="Clear all alarms"
+                    aria-label="ล้างรายการทั้งหมด"
                 >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
                     </svg>
-                    Clear All
+                    ล้างทั้งหมด
                 </button>
             </div>
 
-            {showClearConfirmation && (
-                <div
-                    className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 backdrop-blur-sm animate-fade-in px-4"
-                    onClick={() => setShowClearConfirmation(false)}
-                    onKeyDown={(e) => e.key === 'Escape' && setShowClearConfirmation(false)}
-                    role="alertdialog"
-                    aria-modal="true"
-                    aria-labelledby="clear-all-modal-title"
-                    aria-describedby="clear-all-modal-description"
-                >
-                    <div className="bg-card border border-danger/40 p-6 rounded-2xl shadow-2xl w-full max-w-md animate-scale-in" onClick={(e) => e.stopPropagation()}>
-                        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-danger/15 text-danger" aria-hidden="true">
-                            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.87 12.14A2 2 0 0116.14 21H7.86a2 2 0 01-2-1.86L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                        </div>
-                        <h3 id="clear-all-modal-title" className="text-xl font-bold mb-2">Clear all alarms?</h3>
-                        <p id="clear-all-modal-description" className="text-sm text-muted/80 mb-6">
-                            This permanently deletes every alarm in the current schedule. This action cannot be undone.
-                        </p>
-                        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
-                            <button
-                                type="button"
-                                onClick={() => setShowClearConfirmation(false)}
-                                className="px-4 py-2.5 rounded-lg border border-line hover:bg-white/5 transition-colors font-semibold"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    void clearAll();
-                                    setShowClearConfirmation(false);
-                                }}
-                                className="px-4 py-2.5 rounded-lg bg-danger text-white hover:bg-danger/90 transition-colors font-semibold"
-                                autoFocus
-                            >
-                                Delete all alarms
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <ConfirmDialog
+                open={showClearConfirmation}
+                title="ล้างรายการทั้งหมดหรือไม่?"
+                description="รายการประกาศทั้งหมดในช่องนี้จะถูกลบถาวร ย้อนกลับไม่ได้"
+                confirmLabel="ลบรายการทั้งหมด"
+                onCancel={() => setShowClearConfirmation(false)}
+                onConfirm={() => {
+                    void clearAll();
+                    setShowClearConfirmation(false);
+                }}
+            />
 
             {showShift && (
                 <div
@@ -139,29 +108,29 @@ export function Controls({ selected }: ControlsProps) {
                     aria-labelledby="shift-modal-title"
                 >
                     <div className="bg-card border border-line p-6 rounded-2xl shadow-2xl w-96 animate-scale-in" onClick={(e) => e.stopPropagation()}>
-                        <h3 id="shift-modal-title" className="text-lg font-bold mb-2">Shift Alarm Time</h3>
-                        <p className="text-sm text-muted/70 mb-4">Adjust the time for {selected.size} selected alarm(s).</p>
+                        <h3 id="shift-modal-title" className="text-lg font-bold mb-2">เลื่อนเวลารายการที่เลือก</h3>
+                        <p className="text-sm text-muted/70 mb-4">ปรับเวลาของ {selected.size} รายการที่เลือก (ใส่ค่าติดลบเพื่อเลื่อนให้เร็วขึ้น)</p>
                         <div className="flex gap-2 mb-6">
                             <input
                                 type="number"
                                 className="flex-1 bg-bg-soft border border-line rounded-lg p-3 focus:ring-2 focus:ring-primary focus:border-primary outline-none"
                                 value={shiftAmount}
                                 onChange={e => setShiftAmount(parseInt(e.target.value) || 0)}
-                                placeholder="Amount"
-                                aria-label="Shift amount"
+                                placeholder="จำนวน"
+                                aria-label="จำนวนที่เลื่อน"
                             />
                             <select
                                 value={shiftUnit}
                                 onChange={e => setShiftUnit(e.target.value as 'm' | 's')}
                                 className="bg-bg-soft border border-line rounded-lg px-4 py-3 focus:ring-2 focus:ring-primary focus:border-primary outline-none cursor-pointer"
-                                aria-label="Time unit"
+                                aria-label="หน่วยเวลา"
                             >
-                                <option value="m">Minutes</option>
-                                <option value="s">Seconds</option>
+                                <option value="m">นาที</option>
+                                <option value="s">วินาที</option>
                             </select>
                         </div>
                         <div className="flex justify-end gap-2">
-                            <button onClick={() => setShowShift(false)} className="px-4 py-2 rounded-lg hover:bg-white/5 transition-colors">Cancel</button>
+                            <button onClick={() => setShowShift(false)} className="px-4 py-2 rounded-lg hover:bg-white/5 transition-colors">ยกเลิก</button>
                             <button
                                 onClick={() => {
                                     const delta = shiftUnit === 'm' ? shiftAmount * 60 : shiftAmount;
@@ -170,7 +139,7 @@ export function Controls({ selected }: ControlsProps) {
                                 }}
                                 className="px-4 py-2 rounded-lg bg-primary text-white hover:bg-primary/90 transition-colors font-semibold"
                             >
-                                Apply Shift
+                                เลื่อนเวลา
                             </button>
                         </div>
                     </div>
@@ -187,8 +156,8 @@ export function Controls({ selected }: ControlsProps) {
                     aria-labelledby="equalize-modal-title"
                 >
                     <div className="bg-card border border-line p-6 rounded-2xl shadow-2xl w-96 animate-scale-in" onClick={(e) => e.stopPropagation()}>
-                        <h3 id="equalize-modal-title" className="text-lg font-bold mb-2">Equalize Alarm Gaps</h3>
-                        <p className="text-sm text-muted/70 mb-4">Set a fixed gap between {selected.size} selected alarm(s).</p>
+                        <h3 id="equalize-modal-title" className="text-lg font-bold mb-2">จัดระยะห่างเท่ากัน</h3>
+                        <p className="text-sm text-muted/70 mb-4">กำหนดระยะห่างคงที่ระหว่าง {selected.size} รายการที่เลือก (เริ่มนับจากรายการแรก)</p>
                         <div className="flex gap-2 mb-6">
                             <input
                                 type="number"
@@ -196,21 +165,21 @@ export function Controls({ selected }: ControlsProps) {
                                 className="flex-1 bg-bg-soft border border-line rounded-lg p-3 focus:ring-2 focus:ring-primary focus:border-primary outline-none"
                                 value={gapAmount}
                                 onChange={e => setGapAmount(parseInt(e.target.value) || 0)}
-                                placeholder="Gap size"
-                                aria-label="Gap amount"
+                                placeholder="ระยะห่าง"
+                                aria-label="ระยะห่าง"
                             />
                             <select
                                 value={gapUnit}
                                 onChange={e => setGapUnit(e.target.value as 'm' | 's')}
                                 className="bg-bg-soft border border-line rounded-lg px-4 py-3 focus:ring-2 focus:ring-primary focus:border-primary outline-none cursor-pointer"
-                                aria-label="Time unit"
+                                aria-label="หน่วยเวลา"
                             >
-                                <option value="m">Minutes</option>
-                                <option value="s">Seconds</option>
+                                <option value="m">นาที</option>
+                                <option value="s">วินาที</option>
                             </select>
                         </div>
                         <div className="flex justify-end gap-2">
-                            <button onClick={() => setShowEqualize(false)} className="px-4 py-2 rounded-lg hover:bg-white/5 transition-colors">Cancel</button>
+                            <button onClick={() => setShowEqualize(false)} className="px-4 py-2 rounded-lg hover:bg-white/5 transition-colors">ยกเลิก</button>
                             <button
                                 onClick={() => {
                                     const gap = gapUnit === 'm' ? gapAmount * 60 : gapAmount;
@@ -219,7 +188,7 @@ export function Controls({ selected }: ControlsProps) {
                                 }}
                                 className="px-4 py-2 rounded-lg bg-primary text-white hover:bg-primary/90 transition-colors font-semibold"
                             >
-                                Apply Gaps
+                                จัดระยะห่าง
                             </button>
                         </div>
                     </div>
@@ -236,26 +205,26 @@ export function Controls({ selected }: ControlsProps) {
                     aria-labelledby="save-modal-title"
                 >
                     <div className="bg-card border border-line p-6 rounded-2xl shadow-2xl w-96 animate-scale-in" onClick={(e) => e.stopPropagation()}>
-                        <h3 id="save-modal-title" className="text-lg font-bold mb-2">Save Template</h3>
-                        <p className="text-sm text-muted/70 mb-4">Save the current alarm list as a reusable template.</p>
+                        <h3 id="save-modal-title" className="text-lg font-bold mb-2">บันทึกเทมเพลต</h3>
+                        <p className="text-sm text-muted/70 mb-4">บันทึกตารางปัจจุบันไว้ใช้ซ้ำ (ใช้ร่วมกันทุกช่อง)</p>
                         <input
                             type="text"
-                            placeholder="Template name..."
+                            placeholder="ชื่อเทมเพลต..."
                             className="w-full bg-bg-soft border border-line rounded-lg p-3 mb-6 focus:ring-2 focus:ring-primary focus:border-primary outline-none"
                             value={templateName}
                             onChange={e => setTemplateName(e.target.value)}
                             onKeyDown={e => e.key === 'Enter' && templateName && (saveTemplate(templateName), setShowSave(false), setTemplateName(''))}
                             autoFocus
-                            aria-label="Template name"
+                            aria-label="ชื่อเทมเพลต"
                         />
                         <div className="flex justify-end gap-2">
-                            <button onClick={() => setShowSave(false)} className="px-4 py-2 rounded-lg hover:bg-white/5 transition-colors">Cancel</button>
+                            <button onClick={() => setShowSave(false)} className="px-4 py-2 rounded-lg hover:bg-white/5 transition-colors">ยกเลิก</button>
                             <button
                                 onClick={() => { saveTemplate(templateName); setShowSave(false); setTemplateName(''); }}
                                 disabled={!templateName}
                                 className="px-4 py-2 rounded-lg bg-primary text-white hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-semibold"
                             >
-                                Save
+                                บันทึก
                             </button>
                         </div>
                     </div>
@@ -272,15 +241,15 @@ export function Controls({ selected }: ControlsProps) {
                     aria-labelledby="load-modal-title"
                 >
                     <div className="bg-card border border-line p-6 rounded-2xl shadow-2xl w-96 max-h-[80vh] flex flex-col animate-scale-in" onClick={(e) => e.stopPropagation()}>
-                        <h3 id="load-modal-title" className="text-lg font-bold mb-2">Load Template</h3>
-                        <p className="text-sm text-muted/70 mb-4">Choose a template to load into the current schedule.</p>
+                        <h3 id="load-modal-title" className="text-lg font-bold mb-2">โหลดเทมเพลต</h3>
+                        <p className="text-sm text-muted/70 mb-4">เลือกเทมเพลตที่จะโหลด (จะแทนที่ตารางปัจจุบันของช่องนี้ทั้งหมด)</p>
                         <div className="flex-1 overflow-y-auto space-y-2 mb-6 min-h-[100px]">
                             {templates.length === 0 ? (
                                 <div className="text-center py-8 text-muted/50">
                                     <svg className="w-12 h-12 mx-auto mb-2 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
                                     </svg>
-                                    <p className="text-sm">No templates saved yet</p>
+                                    <p className="text-sm">ยังไม่มีเทมเพลตที่บันทึกไว้</p>
                                 </div>
                             ) :
                                 templates.map(t => (
@@ -292,18 +261,18 @@ export function Controls({ selected }: ControlsProps) {
                                             <span className="font-medium truncate">{t.name}</span>
                                             <span className="text-xs text-muted/50">({t.items.length})</span>
                                         </div>
-                                        <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <div className="flex gap-1.5">
                                             <button
                                                 onClick={() => { loadTemplate(t.name); setShowLoad(false); }}
                                                 className="px-3 py-1.5 text-xs rounded-md bg-primary/20 text-primary hover:bg-primary/30 transition-colors font-semibold"
                                             >
-                                                Load
+                                                โหลด
                                             </button>
                                             <button
                                                 onClick={() => deleteTemplate(t.name)}
                                                 className="px-3 py-1.5 text-xs rounded-md bg-danger/20 text-danger hover:bg-danger/30 transition-colors font-semibold"
                                             >
-                                                Delete
+                                                ลบ
                                             </button>
                                         </div>
                                     </div>
@@ -311,7 +280,7 @@ export function Controls({ selected }: ControlsProps) {
                             }
                         </div>
                         <div className="flex justify-end border-t border-line/50 pt-4">
-                            <button onClick={() => setShowLoad(false)} className="px-4 py-2 rounded-lg hover:bg-white/5 transition-colors">Close</button>
+                            <button onClick={() => setShowLoad(false)} className="px-4 py-2 rounded-lg hover:bg-white/5 transition-colors">ปิด</button>
                         </div>
                     </div>
                 </div>

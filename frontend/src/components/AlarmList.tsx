@@ -69,7 +69,7 @@ function AlarmStatus({ item, mobile = false }: { item: AlarmItem; mobile?: boole
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd"></path>
                 </svg>
             )}
-            {item.notify_status}
+            {item.notify_status === 'SENT' ? 'เล่นแล้ว' : 'ล้มเหลว'}
         </span>
     );
 }
@@ -145,7 +145,7 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                 onClick={() => handleDuplicate(item)}
                 className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-bg-soft"
             >
-                Duplicate
+                ทำซ้ำ
             </button>
             <button
                 onClick={() => {
@@ -155,7 +155,7 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                 }}
                 className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-bg-soft"
             >
-                Edit
+                แก้ไข
             </button>
             <button
                 onClick={() => {
@@ -165,7 +165,7 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                 }}
                 className="w-full text-left px-3 py-2 rounded-lg text-sm text-danger hover:bg-danger/10"
             >
-                Delete
+                ลบ
             </button>
         </>
     );
@@ -177,8 +177,8 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                     onClick={() => handlePlay(item)}
                     disabled={!!playingId}
                     className={`${mobile ? 'h-11 w-11' : 'h-9 w-9'} inline-flex items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary transition-colors hover:bg-primary/20 focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:opacity-40 disabled:cursor-not-allowed`}
-                    title={playingId === item.id ? 'Playing...' : 'Play audio preview'}
-                    aria-label={playingId === item.id ? 'Playing audio preview' : 'Play audio preview'}
+                    title={playingId === item.id ? 'กำลังเล่น...' : 'ฟังตัวอย่างเสียง'}
+                    aria-label={playingId === item.id ? 'กำลังเล่นตัวอย่างเสียง' : 'ฟังตัวอย่างเสียง'}
                 >
                     {playingId === item.id ? (
                         <svg className={`${mobile ? 'w-5 h-5' : 'w-4 h-4'} animate-spin`} fill="none" viewBox="0 0 24 24">
@@ -210,8 +210,8 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                 }}
                 data-alarm-menu-trigger="true"
                 className={`${mobile ? 'h-11 w-11' : 'h-9 w-9'} inline-flex items-center justify-center rounded-lg border border-line bg-bg-soft/60 text-primary transition-colors hover:bg-primary/20 focus:outline-none focus:ring-2 focus:ring-primary/50`}
-                title="More actions"
-                aria-label="More actions"
+                title="เมนูเพิ่มเติม"
+                aria-label="เมนูเพิ่มเติม"
             >
                 <svg className={`${mobile ? 'w-5 h-5' : 'w-4 h-4'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6h.01M12 12h.01M12 18h.01" />
@@ -229,8 +229,8 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
         return (
             <div className="text-center py-16" role="status" aria-live="polite">
                 <div className="mx-auto mb-5 h-10 w-10 rounded-full border-4 border-line border-t-primary animate-spin" aria-hidden="true" />
-                <h3 className="text-xl font-bold text-muted mb-2">Loading alarm schedule</h3>
-                <p className="text-muted/70">Checking the alarm service…</p>
+                <h3 className="text-xl font-bold text-muted mb-2">กำลังโหลดตารางประกาศ</h3>
+                <p className="text-muted/70">กำลังเชื่อมต่อระบบ...</p>
             </div>
         );
     }
@@ -241,15 +241,15 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                 <svg className="mx-auto mb-4 h-12 w-12 text-danger" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v4m0 4h.01M10.29 3.86l-8.82 15.29A1 1 0 002.34 20h19.32a1 1 0 00.87-1.5L13.71 3.86a1 1 0 00-1.72 0z" />
                 </svg>
-                <h3 className="text-xl font-bold text-danger mb-2">Alarm schedule unavailable</h3>
+                <h3 className="text-xl font-bold text-danger mb-2">โหลดตารางประกาศไม่สำเร็จ</h3>
                 <p className="mx-auto max-w-lg text-muted mb-2">{alarmsError}</p>
-                <p className="text-sm font-semibold text-fg mb-6">Do not assume the schedule is empty.</p>
+                <p className="text-sm font-semibold text-fg mb-6">อย่าเข้าใจว่าตารางว่าง — รายการอาจยังอยู่ แต่โหลดมาไม่ได้</p>
                 <button
                     type="button"
                     onClick={() => void retryLoadAlarms()}
                     className="rounded-lg bg-primary px-5 py-2.5 font-semibold text-white transition-colors hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary/60"
                 >
-                    Retry connection
+                    ลองเชื่อมต่อใหม่
                 </button>
             </div>
         );
@@ -263,13 +263,13 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                     </svg>
                 </div>
-                <h3 className="text-xl font-bold text-muted mb-2">No Alarms Yet</h3>
-                <p className="text-muted/70 mb-6">Get started by adding your first alarm</p>
+                <h3 className="text-xl font-bold text-muted mb-2">ยังไม่มีรายการประกาศ</h3>
+                <p className="text-muted/70 mb-6">เริ่มจากเพิ่มรายการแรกได้เลย</p>
                 <div className="inline-flex items-center gap-2 text-sm text-muted/50 bg-bg-soft/50 px-4 py-2 rounded-lg border border-line/50">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
                     </svg>
-                    Use the form on the left
+                    ใช้ฟอร์มด้านซ้าย
                 </div>
             </div>
         );
@@ -284,14 +284,14 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                         checked={selected.size === items.length && items.length > 0}
                         onChange={(e) => onSelect(e.target.checked ? new Set(items.map(i => i.id)) : new Set())}
                         className="rounded border-line bg-bg-soft text-primary focus:ring-2 focus:ring-primary cursor-pointer"
-                        aria-label="Select all alarms"
-                        title={selected.size === items.length ? 'Deselect all' : 'Select all'}
+                        aria-label="เลือกทุกรายการ"
+                        title={selected.size === items.length ? 'ยกเลิกการเลือกทั้งหมด' : 'เลือกทั้งหมด'}
                     />
                 </div>
-                <div className="w-32">Time</div>
-                <div className="flex-1 min-w-0">Audio</div>
-                <div className="w-20 text-right">Status</div>
-                <div className="w-24 text-right">Actions</div>
+                <div className="w-32">เวลา</div>
+                <div className="flex-1 min-w-0">ไฟล์เสียง</div>
+                <div className="w-20 text-right">สถานะ</div>
+                <div className="w-24 text-right">จัดการ</div>
             </div>
 
             <div className="md:hidden flex items-center justify-between px-4 py-2 mb-2">
@@ -302,14 +302,14 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                         onChange={(e) => onSelect(e.target.checked ? new Set(items.map(i => i.id)) : new Set())}
                         className="rounded border-line bg-bg-soft text-primary focus:ring-2 focus:ring-primary cursor-pointer"
                     />
-                    Select All
+                    เลือกทั้งหมด
                 </label>
             </div>
 
             <div
                 className="h-[min(54vh,520px)] min-h-[340px] overflow-y-auto space-y-2 pr-2 custom-scrollbar"
                 role="list"
-                aria-label="Scheduled alarms"
+                aria-label="ตารางประกาศ"
             >
                 {items.map((item, index) => {
                     const audioDisplay = formatAudioName(item.audioDisplayName);
@@ -325,7 +325,7 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                                 : 'bg-bg-soft/50 border-line hover:border-primary/50 hover:bg-bg-soft/80 hover:shadow-md'
                                 }`}
                             role="listitem"
-                            aria-label={`Alarm at ${item.h}:${item.m}:${item.s} - ${audioDisplay}`}
+                            aria-label={`รายการเวลา ${item.h}:${item.m}:${item.s} - ${audioDisplay}`}
                         >
                             <div className="hidden md:grid md:grid-cols-[2.25rem_8rem_minmax(0,1fr)_5rem_6rem] items-center gap-3 px-4 py-3 min-h-[78px]">
                                 <div className="flex items-center justify-center shrink-0">
@@ -334,7 +334,7 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                                         checked={selected.has(item.id)}
                                         onChange={() => toggleSelect(item.id)}
                                         className="rounded border-line bg-bg-soft text-primary focus:ring-2 focus:ring-primary cursor-pointer"
-                                        aria-label={`Select alarm at ${item.h}:${item.m}:${item.s}`}
+                                        aria-label={`เลือกรายการเวลา ${item.h}:${item.m}:${item.s}`}
                                     />
                                 </div>
                                 <div className="shrink-0">
@@ -345,7 +345,7 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                                         <span className={`mt-1 h-10 w-1.5 rounded-full shrink-0 ${theme.accent || 'bg-line'}`} aria-hidden="true" />
                                         <div className="min-w-0">
                                             <div className="text-[10px] font-bold uppercase tracking-wider text-muted/60 leading-none mb-1">
-                                                Audio
+                                                ไฟล์เสียง
                                             </div>
                                             <div className="line-clamp-2 font-bold text-base leading-snug text-fg" title={audioDisplay}>
                                                 {audioDisplay}
@@ -370,7 +370,7 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                                                 checked={selected.has(item.id)}
                                                 onChange={() => toggleSelect(item.id)}
                                                 className="rounded border-line bg-bg-soft text-primary focus:ring-2 focus:ring-primary cursor-pointer"
-                                                aria-label={`Select alarm at ${item.h}:${item.m}:${item.s}`}
+                                                aria-label={`เลือกรายการเวลา ${item.h}:${item.m}:${item.s}`}
                                             />
                                         </div>
                                         <AlarmTime item={item} mobile />
@@ -384,7 +384,7 @@ export function AlarmList({ selected, onSelect }: AlarmListProps) {
                                         <span className={`mt-1 h-9 w-1.5 rounded-full shrink-0 ${theme.accent || 'bg-line'}`} aria-hidden="true" />
                                         <div className="min-w-0">
                                             <div className="text-[10px] font-bold uppercase tracking-wider text-muted/60 leading-none mb-1">
-                                                Audio
+                                                ไฟล์เสียง
                                             </div>
                                             <div className="line-clamp-2 font-bold text-base leading-snug text-fg" title={audioDisplay}>
                                             {audioDisplay}
