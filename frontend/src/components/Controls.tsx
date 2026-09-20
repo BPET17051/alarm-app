@@ -7,7 +7,13 @@ interface ControlsProps {
 }
 
 export function Controls({ selected }: ControlsProps) {
-    const { clearAll, saveTemplate, loadTemplate, templates, deleteTemplate, shiftItems, equalizeGaps } = useAlarms();
+    const { items, clearAll, saveTemplate, loadTemplate, templates, deleteTemplate, shiftItems, equalizeGaps } = useAlarms();
+    const hasItems = items.length > 0;
+    const selectionHint = selected.size === 0
+        ? 'เลือกรายการในตารางก่อน จึงจะเลื่อนเวลาหรือจัดระยะห่างได้'
+        : selected.size === 1
+            ? 'จัดระยะห่างเท่ากันต้องเลือกอย่างน้อย 2 รายการ'
+            : null;
     const [showSave, setShowSave] = useState(false);
     const [showLoad, setShowLoad] = useState(false);
     const [showShift, setShowShift] = useState(false);
@@ -22,6 +28,7 @@ export function Controls({ selected }: ControlsProps) {
     return (
         <div className="mt-6 pt-6 border-t border-line/50">
             <div className="flex flex-wrap gap-3">
+                {hasItems && (<>
                 <div className="flex gap-2 flex-wrap">
                     <button
                         onClick={() => setShowShift(true)}
@@ -50,6 +57,7 @@ export function Controls({ selected }: ControlsProps) {
                 </div>
 
                 <div className="hidden sm:block w-px bg-line/50 self-stretch"></div>
+                </>)}
 
                 <div className="flex gap-2 flex-wrap">
                     <button
@@ -62,7 +70,7 @@ export function Controls({ selected }: ControlsProps) {
                         </svg>
                         โหลดเทมเพลต
                     </button>
-                    <button
+                    {hasItems && <button
                         onClick={() => setShowSave(true)}
                         className="px-4 py-2.5 rounded-lg border border-line hover:bg-white/5 hover:border-primary/50 transition-all text-sm font-semibold flex items-center gap-2"
                         aria-label="บันทึกเป็นเทมเพลต"
@@ -71,12 +79,14 @@ export function Controls({ selected }: ControlsProps) {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path>
                         </svg>
                         บันทึกเทมเพลต
-                    </button>
+                    </button>}
                 </div>
 
                 <button
                     onClick={() => setShowClearConfirmation(true)}
-                    className="ml-auto px-4 py-2.5 rounded-lg border border-danger/50 text-danger hover:bg-danger/10 hover:border-danger transition-all text-sm font-semibold flex items-center gap-2"
+                    className={`ml-auto px-4 py-2.5 rounded-lg border transition-all text-sm font-semibold flex items-center gap-2 ${hasItems
+                        ? 'border-danger/50 text-danger hover:bg-danger/10 hover:border-danger'
+                        : 'border-line text-muted hover:bg-white/5'}`}
                     aria-label="ล้างรายการทั้งหมด"
                 >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -85,6 +95,9 @@ export function Controls({ selected }: ControlsProps) {
                     ล้างทั้งหมด
                 </button>
             </div>
+            {hasItems && selectionHint && (
+                <p className="mt-3 text-sm text-muted">{selectionHint}</p>
+            )}
 
             <ConfirmDialog
                 open={showClearConfirmation}

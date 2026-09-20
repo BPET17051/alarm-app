@@ -290,6 +290,47 @@ test.describe('Channel list states', () => {
   });
 });
 
+test.describe('Home layout: one clear next step', () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  test('the main action is visible without scrolling and is the only solid primary button', async ({ page }) => {
+    await mockApi(page, { alarms: [] });
+    await enterChannel(page);
+
+    await expect(page.getByRole('button', { name: 'เพิ่มรายการประกาศ' })).toBeInViewport();
+    // the audio check is a secondary (neutral) button, not a second solid-blue call to action
+    await expect(page.getByRole('button', { name: 'เปิดเสียง (ทดสอบ)' })).not.toHaveClass(/bg-primary(?!\/)/);
+    await expect(page.getByRole('button', { name: 'เพิ่มรายการประกาศ' })).toHaveClass(/bg-primary(?!\/)/);
+  });
+
+  test('empty schedule offers one real action and hides irrelevant controls', async ({ page }) => {
+    await mockApi(page, { alarms: [] });
+    await enterChannel(page);
+
+    await expect(page.getByText('ยังไม่มีรายการประกาศ')).toBeVisible();
+    await expect(page.getByText('รายการถัดไป')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'โหลดเทมเพลต' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'เลื่อนเวลารายการที่เลือก' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'จัดระยะห่างเท่ากันระหว่างรายการที่เลือก' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'บันทึกเป็นเทมเพลต' })).toHaveCount(0);
+    // still reachable so leftovers hidden by the day filter can be cleared
+    await expect(page.getByRole('button', { name: 'ล้างรายการทั้งหมด' })).toBeVisible();
+
+    await page.getByRole('button', { name: 'เริ่มเพิ่มรายการแรก' }).click();
+    await expect(page.locator('#hours')).toBeFocused();
+  });
+
+  test('the next-item chip sits in the schedule header and disabled actions explain themselves', async ({ page }) => {
+    await mockApi(page);
+    await enterChannel(page);
+
+    await expect(page.getByText('เลือกรายการในตารางก่อน จึงจะเลื่อนเวลาหรือจัดระยะห่างได้')).toBeVisible();
+    await page.getByRole('checkbox', { name: /เลือกรายการเวลา 9:30:0/ }).check();
+    await expect(page.getByText('จัดระยะห่างเท่ากันต้องเลือกอย่างน้อย 2 รายการ')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'เลื่อนเวลารายการที่เลือก' })).toBeEnabled();
+  });
+});
+
 test.describe('Viewport sanity', () => {
   for (const [name, viewport] of Object.entries({
     desktop: { width: 1440, height: 900 },

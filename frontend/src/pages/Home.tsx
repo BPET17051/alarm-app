@@ -10,6 +10,7 @@ import { AlarmList } from '../components/AlarmList';
 import { Controls } from '../components/Controls';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { ReadinessCard } from '../components/ReadinessCard';
+import { NextAlarmChip } from '../components/NextAlarmChip';
 import { formatDayKey } from '../utils/date';
 
 export function Home() {
@@ -69,15 +70,12 @@ export function Home() {
                             <button type="button" onClick={() => setIsRenaming(false)} className="px-3 py-1.5 rounded-lg border border-line text-sm text-muted">ยกเลิก</button>
                         </form>
                     ) : (
-                        <div className="flex items-center gap-3">
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                             <span className="text-2xl font-bold truncate">{session?.name}</span>
                             <button type="button" onClick={startRename} className="text-xs text-muted hover:text-fg underline">เปลี่ยนชื่อ</button>
-                        </div>
-                    )}
-                    {renameError && <div role="alert" className="text-xs text-amber-300 mt-1">{renameError}</div>}
                     <div
                         role="status"
-                        className={`inline-flex items-center gap-2 mt-2 px-3 py-1 rounded-full text-sm font-semibold border ${leaseConfirmed
+                        className={`inline-flex items-center gap-2 px-3 py-0.5 rounded-full text-sm font-semibold border ${leaseConfirmed
                             ? 'bg-green-500/10 border-green-500/40 text-green-300'
                             : 'bg-amber-500/10 border-amber-500/40 text-amber-300'}`}
                     >
@@ -85,6 +83,9 @@ export function Home() {
                             ? '● เครื่องนี้กำลังคุมช่องนี้'
                             : '◐ กำลังยืนยันสิทธิ์ — หยุดเล่นเสียงชั่วคราว'}
                     </div>
+                        </div>
+                    )}
+                    {renameError && <div role="alert" className="text-xs text-amber-300 mt-1">{renameError}</div>}
                 </div>
                 <button
                     type="button"
@@ -109,23 +110,24 @@ export function Home() {
 
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 xl:gap-8">
                 <section className="xl:col-span-5 space-y-6">
-                    <div className="bg-card/90 backdrop-blur-md border border-line rounded-2xl p-6 xl:p-8 shadow-2xl">
+                    <div className="bg-card/90 backdrop-blur-md border border-line rounded-2xl p-5 xl:p-6 shadow-2xl">
                         <Clock serverTime={serverTime} offset={offset} synced={synced} error={error} />
-                        <ReadinessCard serverTime={serverTime} clockReady={synced} />
-                        <div className="my-6 border-t border-line/50"></div>
+                        <ReadinessCard clockReady={synced} />
+                        <div className="my-4 border-t border-line/50"></div>
                         <AlarmForm />
                     </div>
                 </section>
 
                 <section className="xl:col-span-7">
-                    <div className="bg-card/90 backdrop-blur-md border border-line rounded-2xl p-6 xl:p-8 shadow-2xl min-h-[500px] flex flex-col">
-                        <div className="flex items-center justify-between mb-4">
+                    <div className="bg-card/90 backdrop-blur-md border border-line rounded-2xl p-5 xl:p-6 shadow-2xl min-h-[500px] flex flex-col">
+                        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
                             <h2 className="text-xl font-bold text-muted flex items-center gap-2">
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
                                 </svg>
                                 ตารางประกาศวันนี้
                             </h2>
+                            <NextAlarmChip serverTime={serverTime} />
                         </div>
                         <div className="flex-1 overflow-auto">
                             <AlarmList

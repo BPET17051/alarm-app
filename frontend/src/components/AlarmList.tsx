@@ -281,14 +281,22 @@ export function AlarmList({ selected, onSelect, serverTime, playingIds }: AlarmL
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                     </svg>
                 </div>
-                <h3 className="text-xl font-bold text-muted mb-2">ยังไม่มีรายการประกาศ</h3>
-                <p className="text-muted/70 mb-6">เริ่มจากเพิ่มรายการแรกได้เลย</p>
-                <div className="inline-flex items-center gap-2 text-sm text-muted/50 bg-bg-soft/50 px-4 py-2 rounded-lg border border-line/50">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
+                <h3 className="text-xl font-bold text-fg mb-2">ยังไม่มีรายการประกาศ</h3>
+                <p className="text-muted mb-6">เริ่มจากเพิ่มรายการแรกได้เลย</p>
+                <button
+                    type="button"
+                    onClick={() => {
+                        const hours = document.getElementById('hours');
+                        hours?.scrollIntoView({ block: 'center' });
+                        hours?.focus();
+                    }}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg border border-line bg-white/5 hover:bg-white/10 text-fg font-semibold focus:outline-none focus:ring-2 focus:ring-white/60"
+                >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"></path>
                     </svg>
-                    ใช้ฟอร์มด้านซ้าย
-                </div>
+                    เริ่มเพิ่มรายการแรก
+                </button>
             </div>
         );
     }

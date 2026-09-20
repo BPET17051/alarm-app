@@ -84,20 +84,20 @@ export function AlarmForm() {
 
     return (
         <>
-            <form onSubmit={handleSubmit} className="space-y-6">
+            <form onSubmit={handleSubmit} className="space-y-4">
                 {/* Time Input Section */}
                 <div>
-                    <h3 className="block text-sm font-bold text-muted mb-3 tracking-wider">
+                    <h3 className="block text-sm font-bold text-muted mb-2 tracking-wider">
                         ขั้นที่ 1 · ตั้งเวลา
                     </h3>
-                    <div className="bg-bg-soft/50 border border-line/50 rounded-xl p-4">
+                    <div className="bg-bg-soft/50 border border-line/50 rounded-xl p-3">
                         <div className="grid grid-cols-3 gap-3">
                             <div className="flex flex-col">
                                 <label htmlFor="hours" className="text-xs font-semibold text-muted/70 mb-1 text-center uppercase tracking-wide">ชั่วโมง</label>
                                 <input
                                     id="hours" type="number" min="0" max="23" value={h}
                                     onChange={e => handleTimeChange('h', e.target.value)}
-                                    className="w-full bg-bg border border-line rounded-lg p-3 text-center text-2xl font-bold focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all"
+                                    className="w-full bg-bg border border-line rounded-lg p-2 text-center text-xl font-bold focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all"
                                 />
                             </div>
                             <div className="flex flex-col">
@@ -105,7 +105,7 @@ export function AlarmForm() {
                                 <input
                                     id="minutes" type="number" min="0" max="59" value={m}
                                     onChange={e => handleTimeChange('m', e.target.value)}
-                                    className="w-full bg-bg border border-line rounded-lg p-3 text-center text-2xl font-bold focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all"
+                                    className="w-full bg-bg border border-line rounded-lg p-2 text-center text-xl font-bold focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all"
                                 />
                             </div>
                             <div className="flex flex-col">
@@ -113,7 +113,7 @@ export function AlarmForm() {
                                 <input
                                     id="seconds" type="number" min="0" max="59" value={s}
                                     onChange={e => handleTimeChange('s', e.target.value)}
-                                    className="w-full bg-bg border border-line rounded-lg p-3 text-center text-2xl font-bold focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all"
+                                    className="w-full bg-bg border border-line rounded-lg p-2 text-center text-xl font-bold focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all"
                                 />
                             </div>
                         </div>
@@ -122,13 +122,13 @@ export function AlarmForm() {
 
                 {/* Audio Source Trigger */}
                 <div>
-                    <h3 className="block text-sm font-bold text-muted mb-3 tracking-wider">
+                    <h3 className="block text-sm font-bold text-muted mb-2 tracking-wider">
                         ขั้นที่ 2 · เลือกไฟล์เสียง
                     </h3>
 
                     <div
                         onClick={() => setIsModalOpen(true)}
-                        className="bg-bg-soft/30 border border-line rounded-xl p-4 cursor-pointer hover:bg-bg-soft/50 hover:border-primary/50 transition-all group"
+                        className="bg-bg-soft/30 border border-line rounded-xl p-3 cursor-pointer hover:bg-bg-soft/50 hover:border-primary/50 transition-all group"
                     >
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3 overflow-hidden">
