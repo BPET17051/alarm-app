@@ -9,6 +9,8 @@ import authRouter from './routes/auth';
 import templateRouter from './routes/templates';
 import audioRouter from './routes/audio';
 import alarmsRouter from './routes/alarms';
+import channelsRouter from './routes/channels';
+import { requireChannelLease } from './middleware/channelLease';
 
 const app = express();
 
@@ -55,7 +57,8 @@ app.get('/api/time', (_req, res) => {
 app.use('/api/auth', authRouter);
 app.use('/api/templates', templateRouter);
 app.use('/api/audio', audioRouter);
-app.use('/api/alarms', alarmsRouter);
+app.use('/api/channels', channelsRouter);
+app.use('/api/channels/:channelId/alarms', requireChannelLease('channelId'), alarmsRouter);
 
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(err);
