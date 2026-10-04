@@ -3,6 +3,7 @@ import { z } from 'zod';
 import supabase from '../db';
 import { requireChannelLease, type ChannelRequest } from '../middleware/channelLease';
 import { releaseChannelLease } from '../services/channelLease';
+import { getCurrentBangkokDayBounds } from '../utils/dayKey';
 
 const router = Router();
 
@@ -73,6 +74,19 @@ router.patch('/:id', requireChannelLease('id'), async (req, res) => {
 
 router.delete('/:id', requireChannelLease('id'), async (req, res) => {
   const { channelId, channelToken } = req as ChannelRequest;
+  // Old alarms are hidden by the daily list but still hold a foreign key to this channel.
+  const { startIso } = getCurrentBangkokDayBounds();
+  const { error: cleanupError } = await supabase
+    .from('alarms')
+    .delete()
+    .eq('channel_id', channelId)
+    .lt('created_at', startIso);
+
+  if (cleanupError) {
+    await releaseChannelLease(channelId, channelToken);
+    return res.status(500).json({ message: cleanupError.message });
+  }
+
   const { error } = await supabase.from('channels').delete().eq('id', channelId);
 
   if (error) {
