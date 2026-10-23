@@ -39,8 +39,17 @@ export interface ImportedRow {
     isToday: boolean;
 }
 
+// A time range found in another cell of a main row (e.g. exam sub-slots written across columns).
+export interface SubSlot {
+    parentRowIndex: number;
+    start: { h: number; m: number };
+    end: { h: number; m: number };
+    text: string;
+}
+
 export interface ParsedSchedule {
     rows: ImportedRow[];
+    subSlots: SubSlot[];
     sheetName: string;
     courseDate: string | null; // YYYY-MM-DD read from the Thai title, if found
     skippedDetailRows: number; // sub-rows (no time) that were intentionally skipped
@@ -263,6 +272,7 @@ export function parseScheduleFile(buffer: ArrayBuffer, fileName: string, sheetNa
     });
 
     const rows: ImportedRow[] = [];
+    const subSlots: SubSlot[] = [];
     let skippedDetailRows = 0;
 
     if (headerIdx >= 0) {
@@ -315,6 +325,7 @@ export function parseScheduleFile(buffer: ArrayBuffer, fileName: string, sheetNa
             sheetName: selectedSheet,
             courseDate,
             skippedDetailRows,
+            subSlots,
             columnsFound,
             missingColumns,
         };
@@ -328,15 +339,44 @@ export function parseScheduleFile(buffer: ArrayBuffer, fileName: string, sheetNa
             sheetName: selectedSheet,
             courseDate,
             skippedDetailRows,
+            subSlots,
             columnsFound: {},
             missingColumns: ['date', 'time', 'activity', 'room'],
         };
     }
 
+    // Time ranges that sit in other cells of a main row (e.g. exam sub-slots written across columns).
+    const SUB_RANGE = /(\d{1,2})[.:](\d{2})\s*[-–]\s*(\d{1,2})[.:](\d{2})/;
+    const seenSubSlots = new Set<string>();
+    for (let i = 0; i < grid.length; i++) {
+        const line = grid[i] ?? [];
+        if (!parseTimeRange(cellText(line[structure.timeCol]))) continue;
+        line.forEach((cell, c) => {
+            if (c === structure.timeCol || c === structure.activityCol) return;
+            const text = cellText(cell);
+            const match = text.match(SUB_RANGE);
+            if (!match) return;
+            const key = `${i + 1}|${text}`;
+            if (seenSubSlots.has(key)) return;
+            seenSubSlots.add(key);
+            subSlots.push({
+                parentRowIndex: i + 1,
+                start: { h: Number(match[1]), m: Number(match[2]) },
+                end: { h: Number(match[3]), m: Number(match[4]) },
+                text,
+            });
+        });
+    }
+
     for (let i = 0; i < grid.length; i++) {
         const line = grid[i] ?? [];
         const rawTime = cellText(line[structure.timeCol]);
-        const activity = cellText(line[structure.activityCol]);
+        // Rotation rows often keep their group name in a later column (e.g. "กลุ่ม 1" in column D),
+        // so fall back to the first text cell in the row when the activity column is empty.
+        const fallbackText = line
+            .map((cell, c) => ({ c, text: cellText(cell) }))
+            .find(({ c, text }) => c !== structure.timeCol && text !== '' && !isNumericText(text) && !parseTimeRange(text))?.text ?? '';
+        const activity = cellText(line[structure.activityCol]) || fallbackText;
 
         // Only a time range or single time marks a main announcement row. Anything else in the
         // time column (notes like "หมายเหตุ :", sub-slots) and rows without an activity are
@@ -374,6 +414,7 @@ export function parseScheduleFile(buffer: ArrayBuffer, fileName: string, sheetNa
 
     return {
         rows,
+        subSlots,
         sheetName: selectedSheet,
         courseDate,
         skippedDetailRows,

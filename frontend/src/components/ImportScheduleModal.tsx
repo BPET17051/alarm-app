@@ -120,21 +120,37 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
         setSkippedCount(parsed.skippedDetailRows);
         setMissingColumns(parsed.missingColumns);
         setSummary(null);
-        const generated = buildCprAnnouncements(parsed.rows, audioFiles);
-        setRows(parsed.rows.map((r, idx) => {
-            const announcement = generated.find(item => item.sourceRowIndex === r.rowIndex);
-            return {
+        const isToday = parsed.courseDate === formatDayKey(new Date());
+        const announcements = buildCprAnnouncements(parsed.rows, parsed.subSlots, audioFiles);
+        if (announcements.length > 0) {
+            // CPR course: the preview lists the generated announcements, pre-selected, to review and edit.
+            setRows(announcements.map((a, idx) => ({
+                rowIndex: a.sourceRowIndex,
+                rawDate: parsed.courseDate ?? '',
+                rawTime: formatHm(a.h, a.m),
+                activity: a.reason,
+                room: '',
+                status: 'ok' as const,
+                h: a.h,
+                m: a.m,
+                s: a.s,
+                isToday,
+                key: idx,
+                selected: true,
+                audioId: a.audioId,
+                audioDisplayName: a.audioDisplayName,
+                ttsText: '',
+            })));
+        } else {
+            setRows(parsed.rows.map((r, idx) => ({
                 ...r,
                 key: idx,
-                selected: Boolean(announcement),
-                h: announcement?.h ?? r.h,
-                m: announcement?.m ?? r.m,
-                s: announcement?.s ?? r.s,
-                audioId: announcement?.audioId ?? null,
-                audioDisplayName: announcement?.audioDisplayName ?? '',
-            ttsText: '',
-            };
-        }));
+                selected: false,
+                audioId: null,
+                audioDisplayName: '',
+                ttsText: '',
+            })));
+        }
         setStage('preview');
     };
 
@@ -397,7 +413,7 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
                                                             </div>
                                                         )}
                                                     </td>
-                                                    <td className="p-2 align-top max-w-[160px] truncate" title={r.activity}>
+                                                    <td className="p-2 align-top min-w-[180px] max-w-[260px] whitespace-normal break-words" title={r.activity}>
                                                         <div>{r.activity || '-'}</div>
                                                         {canSelect && <input value={r.ttsText} onChange={e => updateRow(r.key, { ttsText: e.target.value })}
                                                             placeholder="ข้อความ TTS (ถ้าต้องการ)" className="mt-1 w-full bg-bg-soft border border-line rounded px-1 py-1 text-xs" />}
@@ -458,7 +474,7 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
                     )}
                 </div>
 
-                <div className="flex justify-end gap-3 p-6 border-t border-line/50">
+                <div className="flex flex-wrap items-center justify-end gap-3 p-6 border-t border-line/50">
                     {stage === 'preview' && (
                         <>
                             <button onClick={onClose} className="px-4 py-2 rounded-lg hover:bg-white/5 transition-colors">
