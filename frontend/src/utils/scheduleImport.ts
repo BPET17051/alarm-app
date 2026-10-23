@@ -3,8 +3,8 @@ import { formatDayKey } from './date';
 import { normalizeTime } from './time';
 
 // Header aliases we recognize (Thai + English), matched case-insensitively against
-// trimmed cell text. Keep this list narrow — anything not recognized is left unmapped
-// rather than guessed.
+// trimmed cell text. Used only when the sheet has a real header row; otherwise the
+// structure is detected from the cells (see detectStructure below).
 const HEADER_ALIASES: Record<'date' | 'time' | 'activity' | 'room', string[]> = {
     date: ['วันที่', 'date'],
     time: ['เวลา', 'time'],
@@ -12,25 +12,73 @@ const HEADER_ALIASES: Record<'date' | 'time' | 'activity' | 'room', string[]> = 
     room: ['ห้อง', 'สถานที่', 'room', 'location'],
 };
 
+const THAI_MONTHS = [
+    'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+    'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม',
+];
+
+// How far down the sheet to look for the course date in the title block.
+const TITLE_SCAN_ROWS = 15;
+
 export interface ImportedRow {
-    rowIndex: number; // 1-based row number in the source file, for user-facing references
+    rowIndex: number; // 1-based row number in the source sheet
     rawDate: string;
-    rawTime: string;
+    rawTime: string; // original text, e.g. "08.00 - 08.50 น."
     activity: string;
     room: string;
-    // Parsed outcome. When status is 'error', h/m/s are not populated and errorReason explains why.
+    // 'error' rows are shown in the preview but can never be selected or saved.
     status: 'ok' | 'error';
     errorReason?: string;
+    // Start time (editable default for the announcement).
     h: number;
     m: number;
     s: number;
+    // End time, only present when the source gives a range.
+    endH?: number;
+    endM?: number;
     isToday: boolean;
 }
 
 export interface ParsedSchedule {
     rows: ImportedRow[];
+    sheetName: string;
+    courseDate: string | null; // YYYY-MM-DD read from the Thai title, if found
+    skippedDetailRows: number; // sub-rows (no time) that were intentionally skipped
     columnsFound: Partial<Record<'date' | 'time' | 'activity' | 'room', string>>;
     missingColumns: Array<'date' | 'time' | 'activity' | 'room'>;
+}
+
+function loadWorkbook(buffer: ArrayBuffer, fileName: string): XLSX.WorkBook {
+    const isCsv = /\.csv$/i.test(fileName);
+    return isCsv
+        ? XLSX.read(new TextDecoder('utf-8').decode(buffer), { type: 'string', raw: false })
+        : XLSX.read(buffer, { type: 'array', cellDates: true });
+}
+
+export function listSheetNames(buffer: ArrayBuffer, fileName: string): string[] {
+    return loadWorkbook(buffer, fileName).SheetNames;
+}
+
+// Copies the top-left value of every merged range into the cells it covers, so that
+// values hidden behind a merge (e.g. a time spanning several rows) are visible to the reader.
+function applyMerges(ws: XLSX.WorkSheet) {
+    for (const range of ws['!merges'] ?? []) {
+        const top = ws[XLSX.utils.encode_cell({ r: range.s.r, c: range.s.c })];
+        if (!top) continue;
+        for (let r = range.s.r; r <= range.e.r; r++) {
+            for (let c = range.s.c; c <= range.e.c; c++) {
+                if (r === range.s.r && c === range.s.c) continue;
+                ws[XLSX.utils.encode_cell({ r, c })] = { ...top };
+            }
+        }
+    }
+}
+
+function cellText(cell: unknown): string {
+    if (cell instanceof Date) {
+        return `${cell.getHours()}:${cell.getMinutes()}:${cell.getSeconds()}`;
+    }
+    return String(cell ?? '').trim();
 }
 
 function normalizeHeaderCell(cell: unknown): string {
@@ -52,13 +100,11 @@ function findColumnIndexes(headerRow: unknown[]): Partial<Record<'date' | 'time'
     return result;
 }
 
-// Parses "8:30", "08:30:00", "8.30", "0830" -> {h,m,s}. Returns null (never guesses) when
-// the text doesn't look like a time.
+// Single time: "8:30", "08.30:05", "0830", or an Excel day fraction. Null when not a time.
 function parseTimeText(raw: string): { h: number; m: number; s: number } | null {
     const text = raw.trim();
     if (!text) return null;
 
-    // 08:30, 8:30:05, 08.30, 08-30
     const sep = text.match(/^(\d{1,2})[:.-](\d{1,2})(?:[:.-](\d{1,2}))?$/);
     if (sep) {
         const h = Number(sep[1]);
@@ -68,7 +114,6 @@ function parseTimeText(raw: string): { h: number; m: number; s: number } | null 
         return { h, m, s };
     }
 
-    // Plain 3-4 digit time like "830" or "0830"
     const digits = text.match(/^(\d{3,4})$/);
     if (digits) {
         const padded = digits[1].padStart(4, '0');
@@ -78,7 +123,6 @@ function parseTimeText(raw: string): { h: number; m: number; s: number } | null 
         return { h, m, s: 0 };
     }
 
-    // Excel sometimes yields a fractional-day number as text when cell formatting is lost.
     const fraction = Number(text);
     if (!Number.isNaN(fraction) && fraction >= 0 && fraction < 1) {
         const totalSeconds = Math.round(fraction * 86400);
@@ -92,40 +136,18 @@ function parseTimeText(raw: string): { h: number; m: number; s: number } | null 
     return null;
 }
 
-// Parses "23/10/2026", "23-10-2026", "2026-10-23", and Buddhist-era years (e.g. 2569) by
-// converting a 4-digit year > 2400 to Gregorian. Returns a day-key string (YYYY-MM-DD) in
-// the *calendar* sense (no timezone conversion) or null if unparseable.
-function parseDateText(raw: string): string | null {
-    const text = raw.trim();
-    if (!text) return null;
-
-    const iso = text.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
-    if (iso) {
-        const year = toGregorianYear(Number(iso[1]));
-        return buildDayKey(year, Number(iso[2]), Number(iso[3]));
-    }
-
-    const dmy = text.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})$/);
-    if (dmy) {
-        let year = Number(dmy[3]);
-        if (year < 100) year += 2000; // 2-digit year shorthand, assumed Gregorian 2000s
-        year = toGregorianYear(year);
-        return buildDayKey(year, Number(dmy[2]), Number(dmy[1]));
-    }
-
-    // Excel date serial number (days since 1899-12-30), sometimes lands as plain text.
-    const serial = Number(text);
-    if (!Number.isNaN(serial) && serial > 20000 && serial < 80000) {
-        const parsed = XLSX.SSF.parse_date_code(serial);
-        if (parsed) return buildDayKey(parsed.y, parsed.m, parsed.d);
-    }
-
-    return null;
+// Range like "08.00 - 08.50 น." or "08:00-08:50". Start and end are both validated.
+function parseTimeRange(raw: string): { start: { h: number; m: number }; end: { h: number; m: number } } | null {
+    const match = raw.trim().match(/^(\d{1,2})[.:](\d{2})\s*(?:น\.?)?\s*[-–]\s*(\d{1,2})[.:](\d{2})/);
+    if (!match) return null;
+    const start = { h: Number(match[1]), m: Number(match[2]) };
+    const end = { h: Number(match[3]), m: Number(match[4]) };
+    if (start.h > 23 || start.m > 59 || end.h > 23 || end.m > 59) return null;
+    return { start, end };
 }
 
 function toGregorianYear(year: number): number {
-    // Thai Buddhist Era is Gregorian + 543. Any year clearly in that range is converted;
-    // anything else is assumed already Gregorian.
+    // Thai Buddhist Era is Gregorian + 543.
     return year > 2400 ? year - 543 : year;
 }
 
@@ -136,94 +158,231 @@ function buildDayKey(year: number, month: number, day: number): string | null {
     return formatDayKey(date);
 }
 
-function cellToDateText(cell: unknown): string {
-    // xlsx yields a JS Date for genuinely-formatted date cells.
-    if (cell instanceof Date) return formatDayKey(cell);
-    return String(cell ?? '');
-}
+// Per-row date cell: "23/10/2026", "2026-10-23", "23-10-2569", or an Excel date serial.
+function parseDateText(raw: string): string | null {
+    const text = raw.trim();
+    if (!text) return null;
 
-function cellToTimeText(cell: unknown): string {
-    if (cell instanceof Date) {
-        return `${cell.getHours()}:${cell.getMinutes()}:${cell.getSeconds()}`;
+    const iso = text.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+    if (iso) return buildDayKey(toGregorianYear(Number(iso[1])), Number(iso[2]), Number(iso[3]));
+
+    const dmy = text.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})$/);
+    if (dmy) {
+        let year = Number(dmy[3]);
+        if (year < 100) year += 2000;
+        return buildDayKey(toGregorianYear(year), Number(dmy[2]), Number(dmy[1]));
     }
-    return String(cell ?? '');
+
+    const serial = Number(text);
+    if (!Number.isNaN(serial) && serial > 20000 && serial < 80000) {
+        const parsed = XLSX.SSF.parse_date_code(serial);
+        if (parsed) return buildDayKey(parsed.y, parsed.m, parsed.d);
+    }
+
+    return null;
 }
 
-export function parseScheduleFile(buffer: ArrayBuffer, fileName: string): ParsedSchedule {
+// Course date from a Thai title line, e.g. "ในวันจันทร์ ที่ 26 ตุลาคม 2569" (พ.ศ. → ค.ศ.).
+export function parseThaiCourseDate(raw: string): string | null {
+    const match = raw.match(/ที่\s*(\d{1,2})\s*(มกราคม|กุมภาพันธ์|มีนาคม|เมษายน|พฤษภาคม|มิถุนายน|กรกฎาคม|สิงหาคม|กันยายน|ตุลาคม|พฤศจิกายน|ธันวาคม)\s*(\d{4})/);
+    if (!match) return null;
+    const month = THAI_MONTHS.indexOf(match[2]) + 1;
+    return buildDayKey(toGregorianYear(Number(match[3])), month, Number(match[1]));
+}
+
+function findCourseDate(grid: unknown[][]): string | null {
+    for (let r = 0; r < Math.min(grid.length, TITLE_SCAN_ROWS); r++) {
+        for (const cell of grid[r] ?? []) {
+            const found = parseThaiCourseDate(cellText(cell));
+            if (found) return found;
+        }
+    }
+    return null;
+}
+
+function isNumericText(text: string) {
+    return /^[\d.,\s]+$/.test(text);
+}
+
+// Picks the time column and the activity column for a sheet without a header row.
+// Time = the column (among the first few) holding the most time values.
+// Activity = the column just right of it holding the most non-numeric text on the same rows.
+function detectStructure(grid: unknown[][]): { timeCol: number; activityCol: number } | null {
+    const maxCols = Math.max(0, ...grid.map(row => row.length));
+    const timeScanCols = Math.min(maxCols, 5);
+
+    let timeCol = -1;
+    let bestTimeCount = 0;
+    for (let c = 0; c < timeScanCols; c++) {
+        let count = 0;
+        for (const row of grid) {
+            const text = cellText(row?.[c]);
+            if (parseTimeRange(text) || parseTimeText(text)) count++;
+        }
+        if (count > bestTimeCount) {
+            bestTimeCount = count;
+            timeCol = c;
+        }
+    }
+    if (timeCol < 0 || bestTimeCount === 0) return null;
+
+    let activityCol = -1;
+    let bestActivityCount = 0;
+    for (let c = timeCol + 1; c < Math.min(maxCols, timeCol + 5); c++) {
+        let count = 0;
+        for (const row of grid) {
+            const timeText = cellText(row?.[timeCol]);
+            const text = cellText(row?.[c]);
+            if ((parseTimeRange(timeText) || parseTimeText(timeText)) && text && !isNumericText(text)) count++;
+        }
+        if (count > bestActivityCount) {
+            bestActivityCount = count;
+            activityCol = c;
+        }
+    }
+    if (activityCol < 0) return null;
+
+    return { timeCol, activityCol };
+}
+
+export function parseScheduleFile(buffer: ArrayBuffer, fileName: string, sheetName?: string): ParsedSchedule {
     const isCsv = /\.csv$/i.test(fileName);
-    const workbook = isCsv
-        ? XLSX.read(new TextDecoder('utf-8').decode(buffer), { type: 'string', raw: false })
-        : XLSX.read(buffer, { type: 'array', cellDates: true });
+    const workbook = loadWorkbook(buffer, fileName);
+    const selectedSheet = sheetName && workbook.SheetNames.includes(sheetName) ? sheetName : workbook.SheetNames[0];
+    const sheet = workbook.Sheets[selectedSheet];
+    applyMerges(sheet);
 
-    const sheetName = workbook.SheetNames[0];
-    const sheet = workbook.Sheets[sheetName];
-    // CSV cells are plain text already, so raw:false (keep the original text, e.g. "13.00")
-    // is what we want there. For a real workbook, raw:false would instead reformat date/number
-    // cells into locale-formatted strings (e.g. "10/23/26"), losing the actual date — so xlsx/xls
-    // uses raw:true to keep real Date objects, which cellToDateText/cellToTimeText expect.
-    const grid: unknown[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: !isCsv, blankrows: false });
-
-    if (grid.length === 0) {
-        return { rows: [], columnsFound: {}, missingColumns: ['date', 'time', 'activity', 'room'] };
-    }
-
-    const headerRowIdx = 0;
-    const headerRow = grid[headerRowIdx];
-    const columns = findColumnIndexes(headerRow);
-    const missingColumns = (['date', 'time', 'activity', 'room'] as const).filter(k => columns[k] === undefined);
-    const columnsFound: ParsedSchedule['columnsFound'] = {};
-    for (const key of Object.keys(columns) as Array<keyof typeof columns>) {
-        const idx = columns[key];
-        if (idx !== undefined) columnsFound[key] = String(headerRow[idx] ?? '').trim();
-    }
-
+    // raw:true keeps real Date objects in xlsx (needed for date/time cells); CSV stays as text.
+    const grid = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '', raw: !isCsv, blankrows: true });
+    const courseDate = findCourseDate(grid);
     const todayKey = formatDayKey(new Date());
+
+    const headerIdx = grid.slice(0, TITLE_SCAN_ROWS).findIndex(row => {
+        const cols = findColumnIndexes(row ?? []);
+        return cols.time !== undefined && cols.activity !== undefined;
+    });
+
     const rows: ImportedRow[] = [];
+    let skippedDetailRows = 0;
 
-    for (let i = headerRowIdx + 1; i < grid.length; i++) {
-        const line = grid[i];
-        if (!line || line.every(cell => String(cell ?? '').trim() === '')) continue;
-
-        const rawDate = columns.date !== undefined ? cellToDateText(line[columns.date]) : '';
-        const rawTime = columns.time !== undefined ? cellToTimeText(line[columns.time]) : '';
-        const activity = columns.activity !== undefined ? String(line[columns.activity] ?? '').trim() : '';
-        const room = columns.room !== undefined ? String(line[columns.room] ?? '').trim() : '';
-
-        const dayKey = parseDateText(rawDate);
-        const time = parseTimeText(rawTime);
-
-        let status: ImportedRow['status'] = 'ok';
-        let errorReason: string | undefined;
-
-        if (!dayKey) {
-            status = 'error';
-            errorReason = `อ่านวันที่ไม่ได้: "${rawDate}"`;
-        } else if (!time) {
-            status = 'error';
-            errorReason = `อ่านเวลาไม่ได้: "${rawTime}"`;
-        } else if (!activity) {
-            status = 'error';
-            errorReason = 'ไม่มีชื่อกิจกรรม';
+    if (headerIdx >= 0) {
+        const headerRow = grid[headerIdx];
+        const columns = findColumnIndexes(headerRow);
+        const missingColumns = (['date', 'time', 'activity', 'room'] as const).filter(k => columns[k] === undefined);
+        const columnsFound: ParsedSchedule['columnsFound'] = {};
+        for (const key of Object.keys(columns) as Array<keyof typeof columns>) {
+            const idx = columns[key];
+            if (idx !== undefined) columnsFound[key] = cellText(headerRow[idx]);
         }
 
-        const normalized = time ? normalizeTime(time.h, time.m, time.s) : { h: 0, m: 0, s: 0 };
+        for (let i = headerIdx + 1; i < grid.length; i++) {
+            const line = grid[i] ?? [];
+            if (line.every(cell => cellText(cell) === '')) continue;
+
+            const rawDateText = columns.date !== undefined ? cellText(line[columns.date]) : '';
+            const rawTime = cellText(line[columns.time!]);
+            const activity = cellText(line[columns.activity!]);
+            const room = columns.room !== undefined ? cellText(line[columns.room]) : '';
+            const dayKey = columns.date !== undefined ? parseDateText(rawDateText) : courseDate;
+            const range = parseTimeRange(rawTime);
+            const time = range ? { h: range.start.h, m: range.start.m, s: 0 } : parseTimeText(rawTime);
+            const normalized = time ? normalizeTime(time.h, time.m, time.s) : { h: 0, m: 0, s: 0 };
+
+            let errorReason: string | undefined;
+            if (!dayKey) errorReason = columns.date !== undefined ? `อ่านวันที่ไม่ได้: "${rawDateText}"` : 'ไม่พบวันที่คอร์สในหัวตาราง';
+            else if (!time) errorReason = `อ่านเวลาไม่ได้: "${rawTime}"`;
+            else if (!activity) errorReason = 'ไม่มีชื่อกิจกรรม';
+
+            rows.push({
+                rowIndex: i + 1,
+                rawDate: rawDateText || courseDate || '',
+                rawTime,
+                activity,
+                room,
+                status: errorReason ? 'error' : 'ok',
+                errorReason,
+                h: normalized.h,
+                m: normalized.m,
+                s: normalized.s,
+                endH: range?.end.h,
+                endM: range?.end.m,
+                isToday: dayKey === todayKey,
+            });
+        }
+
+        return {
+            rows,
+            sheetName: selectedSheet,
+            courseDate,
+            skippedDetailRows,
+            columnsFound,
+            missingColumns,
+        };
+    }
+
+    // No header row: the course table layout (time range in one column, activity in the next).
+    const structure = detectStructure(grid);
+    if (!structure) {
+        return {
+            rows: [],
+            sheetName: selectedSheet,
+            courseDate,
+            skippedDetailRows,
+            columnsFound: {},
+            missingColumns: ['date', 'time', 'activity', 'room'],
+        };
+    }
+
+    for (let i = 0; i < grid.length; i++) {
+        const line = grid[i] ?? [];
+        const rawTime = cellText(line[structure.timeCol]);
+        const activity = cellText(line[structure.activityCol]);
+
+        // Only a time range or single time marks a main announcement row. Anything else in the
+        // time column (notes like "หมายเหตุ :", sub-slots) and rows without an activity are
+        // detail rows and are skipped, not reported as errors.
+        const range = parseTimeRange(rawTime);
+        const single = range ? null : parseTimeText(rawTime);
+        if (!range && !single) {
+            if (rawTime || activity) skippedDetailRows++;
+            continue;
+        }
+        if (!activity) {
+            skippedDetailRows++;
+            continue;
+        }
+
+        const start = range ? { h: range.start.h, m: range.start.m, s: 0 } : single!;
+        const normalized = normalizeTime(start.h, start.m, start.s);
 
         rows.push({
             rowIndex: i + 1,
-            rawDate,
+            rawDate: courseDate ?? '',
             rawTime,
             activity,
-            room,
-            status,
-            errorReason,
+            room: '',
+            status: courseDate ? 'ok' : 'error',
+            errorReason: courseDate ? undefined : 'ไม่พบวันที่คอร์สในหัวตาราง',
             h: normalized.h,
             m: normalized.m,
             s: normalized.s,
-            isToday: dayKey === todayKey,
+            endH: range?.end.h,
+            endM: range?.end.m,
+            isToday: courseDate === todayKey,
         });
     }
 
-    return { rows, columnsFound, missingColumns };
+    return {
+        rows,
+        sheetName: selectedSheet,
+        courseDate,
+        skippedDetailRows,
+        columnsFound: {
+            time: `คอลัมน์ ${XLSX.utils.encode_col(structure.timeCol)}`,
+            activity: `คอลัมน์ ${XLSX.utils.encode_col(structure.activityCol)}`,
+        },
+        missingColumns: [],
+    };
 }
 
 export function readFileAsArrayBuffer(file: File): Promise<ArrayBuffer> {

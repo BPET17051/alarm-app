@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAlarms } from '../hooks/useAlarms';
 import * as API from '../services/api';
 import type { AudioFile } from '../types';
-import { parseScheduleFile, readFileAsArrayBuffer, type ImportedRow } from '../utils/scheduleImport';
+import { listSheetNames, parseScheduleFile, readFileAsArrayBuffer, type ImportedRow } from '../utils/scheduleImport';
 import { sanitizeAudioDisplayName } from '../utils/audio';
 
 interface ImportScheduleModalProps {
@@ -27,6 +27,10 @@ function timeKey(r: { h: number; m: number; s: number }) {
     return r.h * 3600 + r.m * 60 + r.s;
 }
 
+function formatHm(h: number, m: number) {
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
 export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProps) {
     const { items, importItems } = useAlarms();
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -38,6 +42,12 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
     const [rows, setRows] = useState<RowState[]>([]);
     const [audioFiles, setAudioFiles] = useState<AudioFile[]>([]);
     const [summary, setSummary] = useState<{ succeeded: number; failed: number; leaseLost: boolean } | null>(null);
+    const [sheetNames, setSheetNames] = useState<string[]>([]);
+    const [sheetName, setSheetName] = useState('');
+    const [courseDate, setCourseDate] = useState<string | null>(null);
+    const [skippedCount, setSkippedCount] = useState(0);
+    // Kept so changing the worksheet re-parses the same file without asking the user to re-pick it.
+    const fileBufferRef = useRef<ArrayBuffer | null>(null);
 
     useEffect(() => {
         if (!isOpen) return;
@@ -48,6 +58,11 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
         setMissingColumns([]);
         setRows([]);
         setSummary(null);
+        setSheetNames([]);
+        setSheetName('');
+        setCourseDate(null);
+        setSkippedCount(0);
+        fileBufferRef.current = null;
         API.getAudioFiles().then(setAudioFiles).catch(() => setAudioFiles([]));
     }, [isOpen]);
 
@@ -83,6 +98,32 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
         return warnings;
     }, [rows, existingTimeKeys]);
 
+    // Parses one worksheet of the loaded file. Nothing is pre-selected: the user picks the
+    // activities to announce and sets their times, so a wrong sheet or date can't be saved by accident.
+    const loadSheet = (buffer: ArrayBuffer, name: string, sheet: string) => {
+        const parsed = parseScheduleFile(buffer, name, sheet);
+        if (parsed.rows.length === 0) {
+            setFileError('ไม่พบรายการกิจกรรมในชีตนี้ (ตรวจสอบว่าเลือกชีตที่เป็นตารางอบรม)');
+            setRows([]);
+            setStage('pick');
+            return;
+        }
+        setFileError(null);
+        setSheetName(parsed.sheetName);
+        setCourseDate(parsed.courseDate);
+        setSkippedCount(parsed.skippedDetailRows);
+        setMissingColumns(parsed.missingColumns);
+        setSummary(null);
+        setRows(parsed.rows.map((r, idx) => ({
+            ...r,
+            key: idx,
+            selected: false,
+            audioId: null,
+            audioDisplayName: '',
+        })));
+        setStage('preview');
+    };
+
     const handleFile = async (file: File) => {
         setFileError(null);
         setFileName(file.name);
@@ -92,20 +133,10 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
         }
         try {
             const buffer = await readFileAsArrayBuffer(file);
-            const parsed = parseScheduleFile(buffer, file.name);
-            if (parsed.rows.length === 0) {
-                setFileError('ไม่พบข้อมูลในไฟล์ (ตรวจสอบว่ามีแถวข้อมูลใต้หัวตาราง)');
-                return;
-            }
-            setMissingColumns(parsed.missingColumns);
-            setRows(parsed.rows.map((r, idx) => ({
-                ...r,
-                key: idx,
-                selected: r.status === 'ok' && r.isToday,
-                audioId: null,
-                audioDisplayName: '',
-            })));
-            setStage('preview');
+            fileBufferRef.current = buffer;
+            const names = listSheetNames(buffer, file.name);
+            setSheetNames(names);
+            loadSheet(buffer, file.name, names[0]);
         } catch (e) {
             console.error('Failed to parse schedule file', e);
             setFileError('อ่านไฟล์ไม่สำเร็จ ตรวจสอบว่าไฟล์ไม่เสียหายและเป็นรูปแบบ .xlsx หรือ .csv');
@@ -211,7 +242,7 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
                     {(stage === 'preview' || stage === 'saving') && (
                         <div className="space-y-4">
                             <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                                <span className="text-muted">ไฟล์: <strong className="text-fg">{fileName}</strong> · พบ {rows.length} แถว · เลือกแล้ว {selectedCount} รายการ</span>
+                                <span className="text-muted">ไฟล์: <strong className="text-fg">{fileName}</strong> · พบ {rows.length} รายการ · เลือกแล้ว {selectedCount} รายการ</span>
                                 <button
                                     type="button"
                                     onClick={() => { setStage('pick'); setRows([]); setSummary(null); }}
@@ -220,6 +251,31 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
                                 >
                                     เลือกไฟล์อื่น
                                 </button>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-3 text-sm">
+                                {sheetNames.length > 1 && (
+                                    <label className="flex items-center gap-2 text-muted">
+                                        ชีต
+                                        <select
+                                            value={sheetName}
+                                            disabled={stage === 'saving'}
+                                            onChange={e => fileBufferRef.current && loadSheet(fileBufferRef.current, fileName, e.target.value)}
+                                            className="bg-bg-soft border border-line rounded px-2 py-1 text-fg"
+                                            aria-label="เลือกชีต"
+                                        >
+                                            {sheetNames.map(name => (
+                                                <option key={name} value={name}>{name}</option>
+                                            ))}
+                                        </select>
+                                    </label>
+                                )}
+                                <span className="text-muted">
+                                    วันคอร์ส: <strong className="text-fg">{courseDate ?? 'ไม่พบ (อ่านจากหัวตารางไม่ได้)'}</strong>
+                                </span>
+                                {skippedCount > 0 && (
+                                    <span className="text-muted/70">ข้ามแถวรายละเอียด {skippedCount} แถว</span>
+                                )}
                             </div>
 
                             {missingColumns.length > 0 && (
@@ -294,6 +350,11 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
                                                                 />
                                                             </div>
                                                         ) : (r.rawTime || '-')}
+                                                        {canSelect && r.endH !== undefined && r.endM !== undefined && (
+                                                            <div className="text-xs text-muted/70 mt-1">
+                                                                ช่วงเดิม {formatHm(r.h, r.m)} – {formatHm(r.endH, r.endM)}
+                                                            </div>
+                                                        )}
                                                     </td>
                                                     <td className="p-2 align-top max-w-[160px] truncate" title={r.activity}>{r.activity || '-'}</td>
                                                     <td className="p-2 align-top max-w-[120px] truncate" title={r.room}>{r.room || '-'}</td>
