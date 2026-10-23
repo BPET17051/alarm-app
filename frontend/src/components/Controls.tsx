@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAlarms } from '../hooks/useAlarms';
 import { ConfirmDialog } from './ConfirmDialog';
+import { ImportScheduleModal } from './ImportScheduleModal';
 
 interface ControlsProps {
     selected: Set<string>;
@@ -19,6 +20,7 @@ export function Controls({ selected }: ControlsProps) {
     const [showShift, setShowShift] = useState(false);
     const [showEqualize, setShowEqualize] = useState(false);
     const [showClearConfirmation, setShowClearConfirmation] = useState(false);
+    const [showImport, setShowImport] = useState(false);
     const [templateName, setTemplateName] = useState('');
     const [shiftAmount, setShiftAmount] = useState(0);
     const [shiftUnit, setShiftUnit] = useState<'m' | 's'>('m');
@@ -70,6 +72,16 @@ export function Controls({ selected }: ControlsProps) {
                         </svg>
                         โหลดเทมเพลต
                     </button>
+                    <button
+                        onClick={() => setShowImport(true)}
+                        className="px-4 py-2.5 rounded-lg border border-line hover:bg-white/5 hover:border-primary/50 transition-all text-sm font-semibold flex items-center gap-2"
+                        aria-label="นำเข้าตารางประกาศจากไฟล์"
+                    >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 16V4m0 0L8 8m4-4l4 4M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
+                        </svg>
+                        นำเข้าตาราง
+                    </button>
                     {hasItems && <button
                         onClick={() => setShowSave(true)}
                         className="px-4 py-2.5 rounded-lg border border-line hover:bg-white/5 hover:border-primary/50 transition-all text-sm font-semibold flex items-center gap-2"
@@ -98,6 +110,8 @@ export function Controls({ selected }: ControlsProps) {
             {hasItems && selectionHint && (
                 <p className="mt-3 text-sm text-muted">{selectionHint}</p>
             )}
+
+            <ImportScheduleModal isOpen={showImport} onClose={() => setShowImport(false)} />
 
             <ConfirmDialog
                 open={showClearConfirmation}

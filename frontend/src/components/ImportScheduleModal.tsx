@@ -1,0 +1,378 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useAlarms } from '../hooks/useAlarms';
+import * as API from '../services/api';
+import type { AudioFile } from '../types';
+import { parseScheduleFile, readFileAsArrayBuffer, type ImportedRow } from '../utils/scheduleImport';
+import { sanitizeAudioDisplayName } from '../utils/audio';
+
+interface ImportScheduleModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+}
+
+interface RowState extends ImportedRow {
+    key: number;
+    selected: boolean;
+    audioId: string | null;
+    audioDisplayName: string;
+    // Set once a save attempt has run for this row. 'saved' rows are locked (can't be
+    // re-imported by re-selecting them); 'failed' rows stay editable so the user can retry.
+    saveStatus?: 'saved' | 'failed';
+    saveError?: string;
+}
+
+type Stage = 'pick' | 'preview' | 'saving';
+
+function timeKey(r: { h: number; m: number; s: number }) {
+    return r.h * 3600 + r.m * 60 + r.s;
+}
+
+export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProps) {
+    const { items, importItems } = useAlarms();
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const [stage, setStage] = useState<Stage>('pick');
+    const [fileName, setFileName] = useState('');
+    const [fileError, setFileError] = useState<string | null>(null);
+    const [missingColumns, setMissingColumns] = useState<string[]>([]);
+    const [rows, setRows] = useState<RowState[]>([]);
+    const [audioFiles, setAudioFiles] = useState<AudioFile[]>([]);
+    const [summary, setSummary] = useState<{ succeeded: number; failed: number; leaseLost: boolean } | null>(null);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- resetting a modal's local state on open, same pattern as AudioSelectionModal
+        setStage('pick');
+        setFileName('');
+        setFileError(null);
+        setMissingColumns([]);
+        setRows([]);
+        setSummary(null);
+        API.getAudioFiles().then(setAudioFiles).catch(() => setAudioFiles([]));
+    }, [isOpen]);
+
+    // Alarms already in the channel (loaded from the backend), refreshed after every
+    // successful importItems() call — so a duplicate re-upload of the same file is caught here.
+    const existingTimeKeys = useMemo(() => new Set(items.map(timeKey)), [items]);
+
+    // Duplicate/collision detection recomputed whenever the selection or a row's time changes.
+    // This is a hard block (see hasBlockingWarnings below), not just a hint, to satisfy
+    // "prevent duplicate import": a selected row can never be saved while it collides.
+    const rowWarnings = useMemo(() => {
+        const warnings = new Map<number, string>();
+        const selectedByTimeKey = new Map<number, number[]>();
+
+        rows.forEach(r => {
+            if (!r.selected || r.status !== 'ok' || r.saveStatus === 'saved') return;
+            const k = timeKey(r);
+            const list = selectedByTimeKey.get(k) ?? [];
+            list.push(r.key);
+            selectedByTimeKey.set(k, list);
+        });
+
+        rows.forEach(r => {
+            if (!r.selected || r.status !== 'ok' || r.saveStatus === 'saved') return;
+            const k = timeKey(r);
+            if (existingTimeKeys.has(k)) {
+                warnings.set(r.key, 'เวลานี้มีรายการอยู่แล้วในตารางวันนี้ (ซ้ำ)');
+            } else if ((selectedByTimeKey.get(k)?.length ?? 0) > 1) {
+                warnings.set(r.key, 'เวลาชนกับอีกรายการที่เลือกไว้ในไฟล์นี้');
+            }
+        });
+
+        return warnings;
+    }, [rows, existingTimeKeys]);
+
+    const handleFile = async (file: File) => {
+        setFileError(null);
+        setFileName(file.name);
+        if (!/\.(xlsx|xls|csv)$/i.test(file.name)) {
+            setFileError('รองรับเฉพาะไฟล์ .xlsx หรือ .csv เท่านั้น');
+            return;
+        }
+        try {
+            const buffer = await readFileAsArrayBuffer(file);
+            const parsed = parseScheduleFile(buffer, file.name);
+            if (parsed.rows.length === 0) {
+                setFileError('ไม่พบข้อมูลในไฟล์ (ตรวจสอบว่ามีแถวข้อมูลใต้หัวตาราง)');
+                return;
+            }
+            setMissingColumns(parsed.missingColumns);
+            setRows(parsed.rows.map((r, idx) => ({
+                ...r,
+                key: idx,
+                selected: r.status === 'ok' && r.isToday,
+                audioId: null,
+                audioDisplayName: '',
+            })));
+            setStage('preview');
+        } catch (e) {
+            console.error('Failed to parse schedule file', e);
+            setFileError('อ่านไฟล์ไม่สำเร็จ ตรวจสอบว่าไฟล์ไม่เสียหายและเป็นรูปแบบ .xlsx หรือ .csv');
+        }
+    };
+
+    const updateRow = (key: number, patch: Partial<RowState>) => {
+        setRows(prev => prev.map(r => (r.key === key ? { ...r, ...patch } : r)));
+    };
+
+    const selectableRows = rows.filter(r => r.status === 'ok' && r.isToday && r.saveStatus !== 'saved');
+    const pendingSelected = rows.filter(r => r.selected && r.saveStatus !== 'saved');
+    const selectedCount = pendingSelected.length;
+    const hasBlockingWarnings = rowWarnings.size > 0;
+
+    const handleSave = async () => {
+        const toSave = pendingSelected;
+        if (toSave.length === 0 || hasBlockingWarnings) return;
+        setStage('saving');
+        const outcome = await importItems(toSave.map(r => ({
+            h: r.h,
+            m: r.m,
+            s: r.s,
+            audioId: r.audioId,
+            audioDisplayName: r.audioDisplayName || r.activity,
+        })));
+
+        const failedIndexes = new Set(outcome.failed.map(f => f.index));
+        const failedMessages = new Map(outcome.failed.map(f => [f.index, f.message]));
+        setRows(prev => prev.map(r => {
+            const idx = toSave.findIndex(t => t.key === r.key);
+            if (idx === -1) return r;
+            return failedIndexes.has(idx)
+                ? { ...r, saveStatus: 'failed', saveError: failedMessages.get(idx) }
+                : { ...r, saveStatus: 'saved', selected: false };
+        }));
+
+        setSummary({ succeeded: outcome.succeeded, failed: outcome.failed.length, leaseLost: outcome.leaseLost });
+        setStage('preview');
+    };
+
+    if (!isOpen) return null;
+
+    return (
+        <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in"
+            onClick={stage === 'saving' ? undefined : onClose}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="import-modal-title"
+        >
+            <div
+                className="bg-card border border-line rounded-2xl w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl animate-scale-in"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <div className="flex items-center justify-between p-6 border-b border-line/50">
+                    <h2 id="import-modal-title" className="text-xl font-bold">นำเข้าตารางประกาศ</h2>
+                    {stage !== 'saving' && (
+                        <button onClick={onClose} className="text-muted hover:text-fg transition-colors" aria-label="ปิด">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    )}
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-6">
+                    {stage === 'pick' && (
+                        <div className="space-y-4">
+                            <p className="text-sm text-muted">
+                                อัปโหลดไฟล์ .xlsx หรือ .csv ที่มีคอลัมน์ <strong>วันที่, เวลา, กิจกรรม, ห้อง</strong> (ชื่อคอลัมน์ภาษาอังกฤษ date/time/activity/room ก็ใช้ได้)
+                            </p>
+                            <p className="text-xs text-muted/70">
+                                เวอร์ชันนี้นำเข้าได้เฉพาะรายการของ "วันนี้" เท่านั้น รายการวันอื่นจะแสดงในตารางแต่เลือกไม่ได้
+                            </p>
+                            <div
+                                className="border-2 border-dashed border-line rounded-xl p-10 text-center hover:bg-bg-soft/30 transition-colors cursor-pointer"
+                                onClick={() => fileInputRef.current?.click()}
+                            >
+                                <input
+                                    type="file"
+                                    accept=".xlsx,.xls,.csv"
+                                    ref={fileInputRef}
+                                    className="hidden"
+                                    onChange={e => {
+                                        const file = e.target.files?.[0];
+                                        if (file) void handleFile(file);
+                                    }}
+                                />
+                                <div className="text-muted flex flex-col items-center gap-2">
+                                    <svg className="w-8 h-8 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                    </svg>
+                                    <span>กดเพื่อเลือกไฟล์ตารางคอร์ส</span>
+                                </div>
+                            </div>
+                            {fileError && (
+                                <p className="text-sm text-danger bg-danger/10 border border-danger/30 rounded-lg p-3">{fileError}</p>
+                            )}
+                        </div>
+                    )}
+
+                    {(stage === 'preview' || stage === 'saving') && (
+                        <div className="space-y-4">
+                            <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                                <span className="text-muted">ไฟล์: <strong className="text-fg">{fileName}</strong> · พบ {rows.length} แถว · เลือกแล้ว {selectedCount} รายการ</span>
+                                <button
+                                    type="button"
+                                    onClick={() => { setStage('pick'); setRows([]); setSummary(null); }}
+                                    disabled={stage === 'saving'}
+                                    className="text-primary hover:underline disabled:opacity-40 disabled:cursor-not-allowed"
+                                >
+                                    เลือกไฟล์อื่น
+                                </button>
+                            </div>
+
+                            {missingColumns.length > 0 && (
+                                <p className="text-sm text-amber-500 bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
+                                    ไม่พบคอลัมน์: {missingColumns.join(', ')} — แถวที่ขาดข้อมูลจะถูกทำเครื่องหมายว่าอ่านไม่ได้
+                                </p>
+                            )}
+
+                            {summary && (
+                                <div className={`text-sm rounded-lg p-3 border ${summary.failed === 0
+                                    ? 'bg-green-500/10 border-green-500/30 text-green-500'
+                                    : summary.succeeded === 0
+                                        ? 'bg-danger/10 border-danger/30 text-danger'
+                                        : 'bg-amber-500/10 border-amber-500/30 text-amber-500'}`}
+                                >
+                                    <p className="font-bold">
+                                        {summary.failed === 0 ? '✅ บันทึกสำเร็จทั้งหมด' : summary.succeeded === 0 ? '❌ บันทึกไม่สำเร็จ' : '⚠️ บันทึกสำเร็จบางส่วน'}
+                                    </p>
+                                    <p>สำเร็จ {summary.succeeded} รายการ{summary.failed > 0 ? ` · ล้มเหลว ${summary.failed} รายการ (ดูรายละเอียดในตารางด้านล่าง ลองใหม่ได้)` : ''}</p>
+                                    {summary.leaseLost && <p>สิทธิ์ใช้ช่องนี้หลุดระหว่างนำเข้า อาจมีรายการที่ยังไม่ถูกบันทึก กรุณาเข้าช่องใหม่แล้วลองอีกครั้ง</p>}
+                                    <p className="text-xs opacity-80 mt-1">รายการที่บันทึกไปแล้วจะไม่ถูกย้อนกลับ แม้ส่วนที่เหลือล้มเหลว</p>
+                                </div>
+                            )}
+
+                            <div className="border border-line rounded-lg overflow-hidden">
+                                <table className="w-full text-sm">
+                                    <thead className="bg-bg-soft/50 text-xs text-muted uppercase tracking-wide">
+                                        <tr>
+                                            <th className="p-2 w-10"></th>
+                                            <th className="p-2 text-left">วันที่</th>
+                                            <th className="p-2 text-left">เวลา</th>
+                                            <th className="p-2 text-left">กิจกรรม</th>
+                                            <th className="p-2 text-left">ห้อง</th>
+                                            <th className="p-2 text-left">เสียง</th>
+                                            <th className="p-2 text-left">สถานะ</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-line/50">
+                                        {rows.map(r => {
+                                            const isSaved = r.saveStatus === 'saved';
+                                            const canSelect = r.status === 'ok' && r.isToday && !isSaved;
+                                            const warning = rowWarnings.get(r.key);
+                                            return (
+                                                <tr key={r.key} className={!canSelect ? 'opacity-50' : undefined}>
+                                                    <td className="p-2 align-top">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={r.selected}
+                                                            disabled={!canSelect || stage === 'saving'}
+                                                            onChange={e => updateRow(r.key, { selected: e.target.checked })}
+                                                            aria-label={`เลือกแถวที่ ${r.rowIndex}`}
+                                                        />
+                                                    </td>
+                                                    <td className="p-2 align-top whitespace-nowrap">{r.rawDate || '-'}</td>
+                                                    <td className="p-2 align-top whitespace-nowrap">
+                                                        {canSelect ? (
+                                                            <div className="flex gap-1">
+                                                                <input
+                                                                    type="number" min="0" max="23" value={r.h}
+                                                                    disabled={stage === 'saving'}
+                                                                    onChange={e => updateRow(r.key, { h: Number(e.target.value) || 0 })}
+                                                                    className="w-12 bg-bg-soft border border-line rounded px-1 text-center"
+                                                                    aria-label="ชั่วโมง"
+                                                                />
+                                                                :
+                                                                <input
+                                                                    type="number" min="0" max="59" value={r.m}
+                                                                    disabled={stage === 'saving'}
+                                                                    onChange={e => updateRow(r.key, { m: Number(e.target.value) || 0 })}
+                                                                    className="w-12 bg-bg-soft border border-line rounded px-1 text-center"
+                                                                    aria-label="นาที"
+                                                                />
+                                                            </div>
+                                                        ) : (r.rawTime || '-')}
+                                                    </td>
+                                                    <td className="p-2 align-top max-w-[160px] truncate" title={r.activity}>{r.activity || '-'}</td>
+                                                    <td className="p-2 align-top max-w-[120px] truncate" title={r.room}>{r.room || '-'}</td>
+                                                    <td className="p-2 align-top">
+                                                        {canSelect ? (
+                                                            <select
+                                                                value={r.audioId ?? ''}
+                                                                disabled={stage === 'saving'}
+                                                                onChange={e => {
+                                                                    const audio = audioFiles.find(a => a.id === e.target.value);
+                                                                    updateRow(r.key, {
+                                                                        audioId: audio?.id ?? null,
+                                                                        audioDisplayName: audio ? sanitizeAudioDisplayName(audio.displayName) : '',
+                                                                    });
+                                                                }}
+                                                                className="bg-bg-soft border border-line rounded px-2 py-1 text-xs max-w-[140px]"
+                                                            >
+                                                                <option value="">เสียงมาตรฐาน</option>
+                                                                {audioFiles.map(a => (
+                                                                    <option key={a.id} value={a.id}>{a.displayName}</option>
+                                                                ))}
+                                                            </select>
+                                                        ) : '-'}
+                                                    </td>
+                                                    <td className="p-2 align-top text-xs">
+                                                        {isSaved ? (
+                                                            <span className="text-green-500 font-semibold">✅ นำเข้าแล้ว</span>
+                                                        ) : r.saveStatus === 'failed' ? (
+                                                            <span className="text-danger" title={r.saveError}>❌ ล้มเหลว: {r.saveError}</span>
+                                                        ) : r.status === 'error' ? (
+                                                            <span className="text-danger">{r.errorReason}</span>
+                                                        ) : !r.isToday ? (
+                                                            <span className="text-muted">ไม่ใช่วันนี้</span>
+                                                        ) : warning ? (
+                                                            <span className="text-amber-500">{warning}</span>
+                                                        ) : (
+                                                            <span className="text-green-500">พร้อมนำเข้า</span>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            {selectableRows.length === 0 && !summary && (
+                                <p className="text-sm text-muted">ไม่พบรายการของวันนี้ในไฟล์นี้ (เวอร์ชันนี้นำเข้าได้เฉพาะวันนี้)</p>
+                            )}
+                            {hasBlockingWarnings && (
+                                <p className="text-sm text-danger font-semibold">
+                                    มีรายการที่เวลาซ้ำกับตารางเดิมหรือชนกันเองในไฟล์นี้ — ต้องแก้เวลาหรือเลิกเลือกรายการที่ขึ้นเตือนก่อน จึงจะบันทึกได้ (ป้องกันนำเข้าซ้ำ)
+                                </p>
+                            )}
+                        </div>
+                    )}
+                </div>
+
+                <div className="flex justify-end gap-3 p-6 border-t border-line/50">
+                    {stage === 'preview' && (
+                        <>
+                            <button onClick={onClose} className="px-4 py-2 rounded-lg hover:bg-white/5 transition-colors">
+                                {summary ? 'ปิด' : 'ยกเลิก'}
+                            </button>
+                            <button
+                                onClick={handleSave}
+                                disabled={selectedCount === 0 || hasBlockingWarnings}
+                                title={hasBlockingWarnings ? 'มีรายการเวลาซ้ำ/ชนกัน แก้ไขก่อนบันทึก' : undefined}
+                                className="px-6 py-2 rounded-xl bg-primary text-white font-bold hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                            >
+                                บันทึก {selectedCount} รายการเข้าตาราง
+                            </button>
+                        </>
+                    )}
+                    {stage === 'saving' && (
+                        <button disabled className="px-6 py-2 rounded-xl bg-primary text-white font-bold opacity-60">กำลังบันทึก...</button>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}

@@ -28,6 +28,21 @@ interface AlarmsContextType {
     isAudioEnabled: boolean;
     armAudio: () => Promise<boolean>;
     testAudio: (language: AudioTestLanguage) => Promise<AudioTestResult>;
+    importItems: (rows: ImportAlarmInput[]) => Promise<ImportAlarmResult>;
+}
+
+export interface ImportAlarmInput {
+    h: number;
+    m: number;
+    s: number;
+    audioId: string | null;
+    audioDisplayName: string;
+}
+
+export interface ImportAlarmResult {
+    succeeded: number;
+    failed: Array<{ index: number; message: string }>;
+    leaseLost: boolean;
 }
 
 const AlarmsContext = createContext<AlarmsContextType | undefined>(undefined);
@@ -274,6 +289,44 @@ export function AlarmsProvider({ children, session, onLeaseLost }: AlarmsProvide
         }
     }, []);
 
+    // Imports a batch of rows one at a time via the same API.createAlarm path addItem uses,
+    // so the scheduler/backend/channel-lease logic is untouched. Unlike addItem, failures are
+    // collected rather than surfaced via alert() so one bad row doesn't block the rest, and the
+    // caller decides how to report them. Alarms already saved before a failure are kept.
+    const importItems = useCallback(async (rows: ImportAlarmInput[]): Promise<ImportAlarmResult> => {
+        const created: AlarmItem[] = [];
+        const failed: Array<{ index: number; message: string }> = [];
+        let leaseLost = false;
+
+        for (let i = 0; i < rows.length; i++) {
+            if (leaseLost) break;
+            const row = rows[i];
+            try {
+                const nextTime = normalizeTime(row.h, row.m, row.s);
+                const newItem = await API.createAlarm(apiSession, {
+                    ...nextTime,
+                    audioId: row.audioId,
+                    audioDisplayName: row.audioDisplayName,
+                });
+                created.push(newItem);
+            } catch (e: unknown) {
+                if (isLeaseLost(e)) {
+                    leaseLost = true;
+                    onLeaseLost();
+                    break;
+                }
+                const msg = e instanceof Error ? e.message : String(e);
+                failed.push({ index: i, message: msg });
+            }
+        }
+
+        if (created.length > 0) {
+            setItems(prev => [...prev, ...created].sort((a, b) => (a.h * 3600 + a.m * 60 + a.s) - (b.h * 3600 + b.m * 60 + b.s)));
+        }
+
+        return { succeeded: created.length, failed, leaseLost };
+    }, [apiSession, onLeaseLost]);
+
     const armAudio = useCallback(async () => {
         try {
             await unlockBrowserAudio();
@@ -320,7 +373,8 @@ export function AlarmsProvider({ children, session, onLeaseLost }: AlarmsProvide
         deleteTemplate,
         isAudioEnabled,
         armAudio,
-        testAudio
+        testAudio,
+        importItems
     };
 
     return (
