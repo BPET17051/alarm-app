@@ -4,6 +4,7 @@ import * as API from '../services/api';
 import type { AudioFile } from '../types';
 import { listSheetNames, parseScheduleFile, readFileAsArrayBuffer, type ImportedRow } from '../utils/scheduleImport';
 import { sanitizeAudioDisplayName } from '../utils/audio';
+import { buildCprAnnouncements } from '../utils/cprRules';
 
 interface ImportScheduleModalProps {
     isOpen: boolean;
@@ -114,13 +115,20 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
         setSkippedCount(parsed.skippedDetailRows);
         setMissingColumns(parsed.missingColumns);
         setSummary(null);
-        setRows(parsed.rows.map((r, idx) => ({
-            ...r,
-            key: idx,
-            selected: false,
-            audioId: null,
-            audioDisplayName: '',
-        })));
+        const generated = buildCprAnnouncements(parsed.rows, audioFiles);
+        setRows(parsed.rows.map((r, idx) => {
+            const announcement = generated.find(item => item.sourceRowIndex === r.rowIndex);
+            return {
+                ...r,
+                key: idx,
+                selected: Boolean(announcement && r.isToday),
+                h: announcement?.h ?? r.h,
+                m: announcement?.m ?? r.m,
+                s: announcement?.s ?? r.s,
+                audioId: announcement?.audioId ?? null,
+                audioDisplayName: announcement?.audioDisplayName ?? '',
+            };
+        }));
         setStage('preview');
     };
 
