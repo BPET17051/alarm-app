@@ -4,6 +4,7 @@ import * as API from '../services/api';
 import type { AudioFile } from '../types';
 import { listSheetNames, parseScheduleFile, readFileAsArrayBuffer, type ImportedRow } from '../utils/scheduleImport';
 import { sanitizeAudioDisplayName } from '../utils/audio';
+import { formatDayKey } from '../utils/date';
 import { buildCprAnnouncements } from '../utils/cprRules';
 
 interface ImportScheduleModalProps {
@@ -33,7 +34,9 @@ function formatHm(h: number, m: number) {
 }
 
 export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProps) {
-    const { items, importItems } = useAlarms();
+    const { items, importItems, saveTemplateItems } = useAlarms();
+    const [templateName, setTemplateName] = useState('');
+    const [templateSaved, setTemplateSaved] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const [stage, setStage] = useState<Stage>('pick');
@@ -89,7 +92,8 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
         rows.forEach(r => {
             if (!r.selected || r.status !== 'ok' || r.saveStatus === 'saved') return;
             const k = timeKey(r);
-            if (existingTimeKeys.has(k)) {
+            // Only today's rows can collide with the Scheduler; other days are checked against the file alone.
+            if (r.isToday && existingTimeKeys.has(k)) {
                 warnings.set(r.key, 'เวลานี้มีรายการอยู่แล้วในตารางวันนี้ (ซ้ำ)');
             } else if ((selectedByTimeKey.get(k)?.length ?? 0) > 1) {
                 warnings.set(r.key, 'เวลาชนกับอีกรายการที่เลือกไว้ในไฟล์นี้');
@@ -121,7 +125,7 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
             return {
                 ...r,
                 key: idx,
-                selected: Boolean(announcement && r.isToday),
+                selected: Boolean(announcement),
                 h: announcement?.h ?? r.h,
                 m: announcement?.m ?? r.m,
                 s: announcement?.s ?? r.s,
@@ -155,14 +159,39 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
         setRows(prev => prev.map(r => (r.key === key ? { ...r, ...patch } : r)));
     };
 
-    const selectableRows = rows.filter(r => r.status === 'ok' && r.isToday && r.saveStatus !== 'saved');
+    const selectableRows = rows.filter(r => r.status === 'ok' && r.saveStatus !== 'saved');
     const pendingSelected = rows.filter(r => r.selected && r.saveStatus !== 'saved');
     const selectedCount = pendingSelected.length;
     const hasBlockingWarnings = rowWarnings.size > 0;
+    // The Scheduler only shows today's alarms, so the course must be today before anything is added to it.
+    const isCourseToday = courseDate !== null && courseDate === formatDayKey(new Date());
+    const templateItems = rows.filter(r => r.selected).map(r => ({
+        h: r.h,
+        m: r.m,
+        s: r.s,
+        audioId: r.audioId,
+        audioDisplayName: r.audioDisplayName || r.activity,
+    }));
+    const canSaveTemplate = templateItems.length > 0 && templateName.trim() !== '' && stage === 'preview';
+
+    // Saves the selected rows as a template only. It never touches the channel's alarms.
+    const handleSaveTemplate = async () => {
+        if (!canSaveTemplate) return;
+        const name = templateName.trim();
+        try {
+            await saveTemplateItems(name, templateItems);
+            setTemplateSaved(`บันทึก Template "${name}" แล้ว (${templateItems.length} รายการ)`);
+            setTemplateName('');
+        } catch (e) {
+            console.error('Failed to save template', e);
+            setTemplateSaved(null);
+            setFileError('บันทึก Template ไม่สำเร็จ ลองใหม่อีกครั้ง');
+        }
+    };
 
     const handleSave = async () => {
         const toSave = pendingSelected;
-        if (toSave.length === 0 || hasBlockingWarnings) return;
+        if (toSave.length === 0 || hasBlockingWarnings || !isCourseToday) return;
         setStage('saving');
         const outcome = await importItems(toSave.map(r => ({
             h: r.h,
@@ -324,7 +353,7 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
                                     <tbody className="divide-y divide-line/50">
                                         {rows.map(r => {
                                             const isSaved = r.saveStatus === 'saved';
-                                            const canSelect = r.status === 'ok' && r.isToday && !isSaved;
+                                            const canSelect = r.status === 'ok' && !isSaved;
                                             const warning = rowWarnings.get(r.key);
                                             return (
                                                 <tr key={r.key} className={!canSelect ? 'opacity-50' : undefined}>
@@ -427,13 +456,35 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
                             <button onClick={onClose} className="px-4 py-2 rounded-lg hover:bg-white/5 transition-colors">
                                 {summary ? 'ปิด' : 'ยกเลิก'}
                             </button>
+                            <div className="flex flex-1 flex-wrap items-center gap-2 justify-end">
+                                <input
+                                    type="text"
+                                    value={templateName}
+                                    onChange={e => { setTemplateName(e.target.value); setTemplateSaved(null); }}
+                                    placeholder="ชื่อ Template เช่น CPR-ACLS-รุ่น1"
+                                    maxLength={60}
+                                    aria-label="ชื่อ Template"
+                                    className="bg-bg-soft border border-line rounded-lg px-3 py-2 text-sm w-56"
+                                />
+                                <button
+                                    onClick={handleSaveTemplate}
+                                    disabled={!canSaveTemplate}
+                                    title={templateItems.length === 0 ? 'เลือกรายการก่อน' : templateName.trim() === '' ? 'ใส่ชื่อ Template ก่อน' : undefined}
+                                    className="px-4 py-2 rounded-xl border border-line hover:bg-white/5 font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                                >
+                                    บันทึก Template ({templateItems.length})
+                                </button>
+                            </div>
+                            {templateSaved && (
+                                <p className="w-full text-sm text-green-500">{templateSaved}</p>
+                            )}
                             <button
                                 onClick={handleSave}
-                                disabled={selectedCount === 0 || hasBlockingWarnings}
-                                title={hasBlockingWarnings ? 'มีรายการเวลาซ้ำ/ชนกัน แก้ไขก่อนบันทึก' : undefined}
+                                disabled={selectedCount === 0 || hasBlockingWarnings || !isCourseToday}
+                                title={!isCourseToday ? 'เพิ่มเข้าตารางได้เฉพาะคอร์สของวันนี้ ใช้ "บันทึก Template" แทน' : hasBlockingWarnings ? 'มีรายการเวลาซ้ำ/ชนกัน แก้ไขก่อนบันทึก' : undefined}
                                 className="px-6 py-2 rounded-xl bg-primary text-white font-bold hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                             >
-                                บันทึก {selectedCount} รายการเข้าตาราง
+                                เพิ่มเข้าตารางวันนี้ ({selectedCount})
                             </button>
                         </>
                     )}

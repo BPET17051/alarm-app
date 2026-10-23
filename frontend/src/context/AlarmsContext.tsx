@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, useMemo, type ReactNode } from 'react';
-import type { AlarmItem, ChannelSession, Template } from '../types';
+import type { AlarmItem, ChannelSession, Template, TemplateItem } from '../types';
 import * as API from '../services/api';
 import * as Storage from '../services/storage';
 import { playTestAnnouncement, unlockBrowserAudio, type AudioTestLanguage, type AudioTestResult } from '../services/audioTest';
@@ -23,6 +23,7 @@ interface AlarmsContextType {
     shiftItems: (ids: string[], deltaSeconds: number) => Promise<void>;
     equalizeGaps: (ids: string[], gapSeconds: number) => Promise<void>;
     saveTemplate: (name: string) => void;
+    saveTemplateItems: (name: string, items: TemplateItem[]) => Promise<void>;
     loadTemplate: (name: string) => Promise<void>;
     deleteTemplate: (name: string) => void;
     isAudioEnabled: boolean;
@@ -269,6 +270,13 @@ export function AlarmsProvider({ children, session, onLeaseLost }: AlarmsProvide
         }
     }, [items]);
 
+    // Saves an arbitrary list of rows as a template (e.g. from the import preview). Does not touch
+    // the channel's alarms, so it is safe to use for a course on another day.
+    const saveTemplateItems = useCallback(async (name: string, templateItems: TemplateItem[]) => {
+        await API.saveTemplate(name, templateItems);
+        setTemplates(await API.getTemplates());
+    }, []);
+
     const loadTemplate = useCallback(async (name: string) => {
         const tpl = templates.find(t => t.name === name);
         if (tpl) {
@@ -368,6 +376,7 @@ export function AlarmsProvider({ children, session, onLeaseLost }: AlarmsProvide
         shiftItems,
         equalizeGaps,
         saveTemplate,
+        saveTemplateItems,
         loadTemplate,
 
         deleteTemplate,

@@ -21,11 +21,33 @@ export function Controls({ selected }: ControlsProps) {
     const [showEqualize, setShowEqualize] = useState(false);
     const [showClearConfirmation, setShowClearConfirmation] = useState(false);
     const [showImport, setShowImport] = useState(false);
+    const [pendingLoad, setPendingLoad] = useState<string | null>(null);
+    const [pendingSave, setPendingSave] = useState<string | null>(null);
     const [templateName, setTemplateName] = useState('');
     const [shiftAmount, setShiftAmount] = useState(0);
     const [shiftUnit, setShiftUnit] = useState<'m' | 's'>('m');
     const [gapAmount, setGapAmount] = useState(5);
     const [gapUnit, setGapUnit] = useState<'m' | 's'>('m');
+
+    const requestSaveTemplate = () => {
+        const name = templateName.trim();
+        if (!name) return;
+        if (templates.some(template => template.name === name)) {
+            setPendingSave(name);
+            return;
+        }
+        saveTemplate(name);
+        setShowSave(false);
+        setTemplateName('');
+    };
+
+    const confirmSaveTemplate = () => {
+        if (!pendingSave) return;
+        saveTemplate(pendingSave);
+        setPendingSave(null);
+        setShowSave(false);
+        setTemplateName('');
+    };
 
     return (
         <div className="mt-6 pt-6 border-t border-line/50">
@@ -114,6 +136,19 @@ export function Controls({ selected }: ControlsProps) {
             <ImportScheduleModal isOpen={showImport} onClose={() => setShowImport(false)} />
 
             <ConfirmDialog
+                open={pendingLoad !== null}
+                title="แทนที่รายการประกาศปัจจุบันหรือไม่?"
+                description={`ช่องนี้มี ${items.length} รายการอยู่แล้ว การโหลดเทมเพลตจะลบรายการทั้งหมดในช่องนี้ก่อนนำเทมเพลตเข้า`}
+                confirmLabel="แทนที่รายการ"
+                onCancel={() => setPendingLoad(null)}
+                onConfirm={() => {
+                    if (pendingLoad) void loadTemplate(pendingLoad);
+                    setPendingLoad(null);
+                    setShowLoad(false);
+                }}
+            />
+
+            <ConfirmDialog
                 open={showClearConfirmation}
                 title="ล้างรายการทั้งหมดหรือไม่?"
                 description="รายการประกาศทั้งหมดในช่องนี้จะถูกลบถาวร ย้อนกลับไม่ได้"
@@ -123,6 +158,15 @@ export function Controls({ selected }: ControlsProps) {
                     void clearAll();
                     setShowClearConfirmation(false);
                 }}
+            />
+
+            <ConfirmDialog
+                open={pendingSave !== null}
+                title="บันทึกทับเทมเพลตเดิมหรือไม่?"
+                description={`มีเทมเพลตชื่อ “${pendingSave ?? ''}” อยู่แล้ว การบันทึกจะเขียนทับรายการเดิม`}
+                confirmLabel="บันทึกทับ"
+                onCancel={() => setPendingSave(null)}
+                onConfirm={confirmSaveTemplate}
             />
 
             {showShift && (
@@ -240,14 +284,14 @@ export function Controls({ selected }: ControlsProps) {
                             className="w-full bg-bg-soft border border-line rounded-lg p-3 mb-6 focus:ring-2 focus:ring-primary focus:border-primary outline-none"
                             value={templateName}
                             onChange={e => setTemplateName(e.target.value)}
-                            onKeyDown={e => e.key === 'Enter' && templateName && (saveTemplate(templateName), setShowSave(false), setTemplateName(''))}
+                            onKeyDown={e => e.key === 'Enter' && requestSaveTemplate()}
                             autoFocus
                             aria-label="ชื่อเทมเพลต"
                         />
                         <div className="flex justify-end gap-2">
                             <button onClick={() => setShowSave(false)} className="px-4 py-2 rounded-lg hover:bg-white/5 transition-colors">ยกเลิก</button>
                             <button
-                                onClick={() => { saveTemplate(templateName); setShowSave(false); setTemplateName(''); }}
+                                onClick={requestSaveTemplate}
                                 disabled={!templateName}
                                 className="px-4 py-2 rounded-lg bg-primary text-white hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-semibold"
                             >
@@ -290,7 +334,14 @@ export function Controls({ selected }: ControlsProps) {
                                         </div>
                                         <div className="flex gap-1.5">
                                             <button
-                                                onClick={() => { loadTemplate(t.name); setShowLoad(false); }}
+                                                onClick={() => {
+                                                    if (hasItems) {
+                                                        setPendingLoad(t.name);
+                                                    } else {
+                                                        void loadTemplate(t.name);
+                                                        setShowLoad(false);
+                                                    }
+                                                }}
                                                 className="px-3 py-1.5 text-xs rounded-md bg-primary/20 text-primary hover:bg-primary/30 transition-colors font-semibold"
                                             >
                                                 โหลด
