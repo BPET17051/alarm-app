@@ -17,6 +17,7 @@ interface RowState extends ImportedRow {
     selected: boolean;
     audioId: string | null;
     audioDisplayName: string;
+    ttsText: string;
     // Set once a save attempt has run for this row. 'saved' rows are locked (can't be
     // re-imported by re-selecting them); 'failed' rows stay editable so the user can retry.
     saveStatus?: 'saved' | 'failed';
@@ -131,6 +132,7 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
                 s: announcement?.s ?? r.s,
                 audioId: announcement?.audioId ?? null,
                 audioDisplayName: announcement?.audioDisplayName ?? '',
+            ttsText: '',
             };
         }));
         setStage('preview');
@@ -171,6 +173,7 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
         s: r.s,
         audioId: r.audioId,
         audioDisplayName: r.audioDisplayName || r.activity,
+        ttsText: r.ttsText.trim() || null,
     }));
     const canSaveTemplate = templateItems.length > 0 && templateName.trim() !== '' && stage === 'preview';
 
@@ -199,6 +202,7 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
             s: r.s,
             audioId: r.audioId,
             audioDisplayName: r.audioDisplayName || r.activity,
+            ttsText: r.ttsText.trim() || null,
         })));
 
         const failedIndexes = new Set(outcome.failed.map(f => f.index));
@@ -393,7 +397,11 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
                                                             </div>
                                                         )}
                                                     </td>
-                                                    <td className="p-2 align-top max-w-[160px] truncate" title={r.activity}>{r.activity || '-'}</td>
+                                                    <td className="p-2 align-top max-w-[160px] truncate" title={r.activity}>
+                                                        <div>{r.activity || '-'}</div>
+                                                        {canSelect && <input value={r.ttsText} onChange={e => updateRow(r.key, { ttsText: e.target.value })}
+                                                            placeholder="ข้อความ TTS (ถ้าต้องการ)" className="mt-1 w-full bg-bg-soft border border-line rounded px-1 py-1 text-xs" />}
+                                                    </td>
                                                     <td className="p-2 align-top max-w-[120px] truncate" title={r.room}>{r.room || '-'}</td>
                                                     <td className="p-2 align-top">
                                                         {canSelect ? (

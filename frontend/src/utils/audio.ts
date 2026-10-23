@@ -37,8 +37,12 @@ export function formatAudioName(
 export type PlaybackResult = 'audio' | 'beep' | 'failed' | 'cancelled';
 
 const activePlaybacks = new Set<() => void>();
+let queueVersion = 0;
+let playbackQueue: Promise<PlaybackResult> = Promise.resolve('cancelled');
 
 export function stopAlarm() {
+    queueVersion += 1;
+    window.speechSynthesis?.cancel();
     for (const cancel of Array.from(activePlaybacks)) cancel();
 }
 
@@ -113,11 +117,60 @@ export async function playBeepFallback(): Promise<PlaybackResult> {
     });
 }
 
-export async function playAlarm(audioUrl: string | null): Promise<PlaybackResult> {
+async function speakThai(text: string): Promise<PlaybackResult> {
+    if (!('speechSynthesis' in window)) return 'failed';
+    const synth = window.speechSynthesis;
+    const findThaiVoice = () => synth.getVoices().find(item => {
+        const lang = item.lang.toLowerCase();
+        return lang === 'th-th' || lang.startsWith('th-') || lang === 'th';
+    });
+    let voice = findThaiVoice();
+    if (!voice && synth.getVoices().length === 0) {
+        voice = await new Promise<SpeechSynthesisVoice | undefined>(resolve => {
+            const onVoicesChanged = () => {
+                synth.removeEventListener('voiceschanged', onVoicesChanged);
+                resolve(findThaiVoice());
+            };
+            synth.addEventListener('voiceschanged', onVoicesChanged, { once: true });
+            window.setTimeout(() => {
+                synth.removeEventListener('voiceschanged', onVoicesChanged);
+                resolve(findThaiVoice());
+            }, 1200);
+        });
+    }
+    if (!voice) return 'failed';
+    return new Promise(resolve => {
+        const utterance = new SpeechSynthesisUtterance(text);
+        // Chrome's stable path is language-selected; assigning a cached Voice object
+        // can raise speech-error on Windows even when the same voice is available.
+        utterance.lang = 'th-TH';
+        const finish = (result: PlaybackResult) => {
+            activePlaybacks.delete(cancel);
+            resolve(result);
+        };
+        utterance.onend = () => finish('audio');
+        utterance.onerror = () => finish('failed');
+        const cancel = () => { synth.cancel(); finish('cancelled'); };
+        activePlaybacks.add(cancel);
+        synth.speak(utterance);
+    });
+}
+
+export async function playAlarm(audioUrl: string | null, ttsText?: string | null): Promise<PlaybackResult> {
     if (audioUrl) {
         const result = await playAudioFile(audioUrl);
-        if (result !== 'failed') return result;
+        if (result === 'cancelled') return result;
+        if (result === 'failed' && !ttsText?.trim()) return result;
     }
 
+    if (ttsText?.trim()) return speakThai(ttsText.trim());
+
     return playBeepFallback();
+}
+
+export function enqueueAlarm(audioUrl: string | null, ttsText?: string | null): Promise<PlaybackResult> {
+    const version = queueVersion;
+    const next = playbackQueue.then(() => version === queueVersion ? playAlarm(audioUrl, ttsText) : 'cancelled');
+    playbackQueue = next.catch(() => 'failed');
+    return next;
 }

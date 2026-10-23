@@ -15,7 +15,7 @@ interface AlarmsContextType {
     templates: Template[];
     playedIds: Set<string>;
     syncPlaybackDay: (dayKey: string) => void;
-    addItem: (h: number, m: number, s: number, audioId: string | null, audioDisplayName: string) => Promise<void>;
+    addItem: (h: number, m: number, s: number, audioId: string | null, audioDisplayName: string, ttsText?: string | null) => Promise<void>;
     updateItem: (id: string, updates: Partial<AlarmItem>) => Promise<void>;
     removeItem: (id: string) => Promise<void>;
     clearAll: () => Promise<void>;
@@ -38,6 +38,7 @@ export interface ImportAlarmInput {
     s: number;
     audioId: string | null;
     audioDisplayName: string;
+    ttsText?: string | null;
 }
 
 export interface ImportAlarmResult {
@@ -148,11 +149,11 @@ export function AlarmsProvider({ children, session, onLeaseLost }: AlarmsProvide
     }, [loadAlarms]);
 
     // Actions
-    const addItem = useCallback(async (h: number, m: number, s: number, audioId: string | null, audioDisplayName: string) => {
+    const addItem = useCallback(async (h: number, m: number, s: number, audioId: string | null, audioDisplayName: string, ttsText: string | null = null) => {
         try {
             const nextTime = normalizeTime(h, m, s);
             console.log('Adding item:', { ...nextTime, audioId, audioDisplayName });
-            const newItem = await API.createAlarm(apiSession, { ...nextTime, audioId, audioDisplayName });
+            const newItem = await API.createAlarm(apiSession, { ...nextTime, audioId, audioDisplayName, ttsText });
             console.log('Added item response:', newItem);
             setItems(prev => {
                 const next = [...prev, newItem].sort((a, b) => (a.h * 3600 + a.m * 60 + a.s) - (b.h * 3600 + b.m * 60 + b.s));
@@ -259,8 +260,8 @@ export function AlarmsProvider({ children, session, onLeaseLost }: AlarmsProvide
 
     const saveTemplate = useCallback(async (name: string) => {
         try {
-            const templateItems = items.map(({ h, m, s, audioId, audioDisplayName }) => ({
-                h, m, s, audioId, audioDisplayName,
+            const templateItems = items.map(({ h, m, s, audioId, audioDisplayName, ttsText }) => ({
+                h, m, s, audioId, audioDisplayName, ttsText,
             }));
             await API.saveTemplate(name, templateItems);
             const tpls = await API.getTemplates();
@@ -283,7 +284,7 @@ export function AlarmsProvider({ children, session, onLeaseLost }: AlarmsProvide
             await clearAll();
             // Add items sequentially to preserve order
             for (const item of tpl.items) {
-                await addItem(item.h, item.m, item.s || 0, item.audioId, item.audioDisplayName);
+                await addItem(item.h, item.m, item.s || 0, item.audioId, item.audioDisplayName, item.ttsText);
             }
         }
     }, [templates, clearAll, addItem]);
@@ -315,6 +316,7 @@ export function AlarmsProvider({ children, session, onLeaseLost }: AlarmsProvide
                     ...nextTime,
                     audioId: row.audioId,
                     audioDisplayName: row.audioDisplayName,
+                    ttsText: row.ttsText ?? null,
                 });
                 created.push(newItem);
             } catch (e: unknown) {

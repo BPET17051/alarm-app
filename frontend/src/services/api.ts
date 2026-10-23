@@ -5,6 +5,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
 type AlarmApiResponse = AlarmItem & {
     audioName?: string | null;
     audioDisplayName?: string | null;
+    ttsText?: string | null;
 };
 
 type AudioFileApiResponse = AudioFile & {
@@ -17,6 +18,7 @@ function normalizeAlarm(item: AlarmApiResponse): AlarmItem {
     return {
         ...item,
         audioDisplayName: item.audioDisplayName ?? item.audioName ?? '',
+        ttsText: item.ttsText ?? null,
     };
 }
 
@@ -211,6 +213,7 @@ function toTemplateItem(item: AlarmApiResponse): TemplateItem {
         s: item.s || 0,
         audioId: item.audioId ?? null,
         audioDisplayName: item.audioDisplayName ?? item.audioName ?? '',
+        ttsText: item.ttsText ?? null,
     };
 }
 

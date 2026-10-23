@@ -5,10 +5,11 @@ export interface AlarmItem {
     s: number;
     audioId: string | null;
     audioDisplayName: string;
+    ttsText?: string | null;
     notify_status: 'PENDING' | 'SENT' | 'FAILED';
 }
 
-export type TemplateItem = Pick<AlarmItem, 'h' | 'm' | 's' | 'audioId' | 'audioDisplayName'>;
+export type TemplateItem = Pick<AlarmItem, 'h' | 'm' | 's' | 'audioId' | 'audioDisplayName' | 'ttsText'>;
 
 export interface Template {
     name: string;

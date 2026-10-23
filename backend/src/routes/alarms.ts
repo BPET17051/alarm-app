@@ -6,12 +6,13 @@ import { getCurrentBangkokDayBounds } from '../utils/dayKey';
 const router = Router({ mergeParams: true });
 
 function mapAlarm(a: any) {
-    const { audio_id, audio_name, channel_id: _channelId, ...rest } = a;
+    const { audio_id, audio_name, tts_text, channel_id: _channelId, ...rest } = a;
     return {
         ...rest,
         s: a.s || 0,
         audioId: audio_id,
         audioDisplayName: audio_name,
+        ttsText: tts_text ?? null,
     };
 }
 
@@ -36,7 +37,7 @@ router.get('/', async (req, res) => {
 
 router.post('/', async (req, res) => {
     const { channelId } = req as unknown as ChannelRequest;
-    const { h, m, s, audioId, audioDisplayName } = req.body;
+    const { h, m, s, audioId, audioDisplayName, ttsText } = req.body;
 
     if (h === undefined || m === undefined) {
         return res.status(400).json({ message: 'Missing time (h, m)' });
@@ -51,6 +52,7 @@ router.post('/', async (req, res) => {
             h, m, s: s || 0,
             audio_id: audioId || null,
             audio_name: audioDisplayName || '',
+            tts_text: typeof ttsText === 'string' && ttsText.trim() ? ttsText.trim() : null,
             notify_status: 'PENDING',
             created_at: now,
             updated_at: now
@@ -66,7 +68,7 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
     const { channelId } = req as unknown as ChannelRequest;
     const { id } = req.params;
-    const { h, m, s, audioId, audioDisplayName, notify_status } = req.body;
+    const { h, m, s, audioId, audioDisplayName, ttsText, notify_status } = req.body;
 
     const updates: any = { updated_at: new Date().toISOString() };
     if (h !== undefined) updates.h = h;
@@ -74,6 +76,7 @@ router.put('/:id', async (req, res) => {
     if (s !== undefined) updates.s = s;
     if (audioId !== undefined) updates.audio_id = audioId;
     if (audioDisplayName !== undefined) updates.audio_name = audioDisplayName;
+    if (ttsText !== undefined) updates.tts_text = typeof ttsText === 'string' && ttsText.trim() ? ttsText.trim() : null;
     if (notify_status !== undefined) updates.notify_status = notify_status;
 
     const { data, error } = await supabase

@@ -17,6 +17,7 @@ export function EditAlarmModal({ alarm, isOpen, onClose, onUpdate }: EditAlarmMo
     const [h, setH] = useState(alarm.h);
     const [m, setM] = useState(alarm.m);
     const [s, setS] = useState(alarm.s || 0);
+    const [ttsText, setTtsText] = useState(alarm.ttsText ?? '');
     const [isAudioModalOpen, setIsAudioModalOpen] = useState(false);
     const [audioSelection, setAudioSelection] = useState<AudioSelection | null>(null);
 
@@ -26,6 +27,7 @@ export function EditAlarmModal({ alarm, isOpen, onClose, onUpdate }: EditAlarmMo
             setH(alarm.h);
             setM(alarm.m);
             setS(alarm.s || 0);
+            setTtsText(alarm.ttsText ?? '');
             setAudioSelection(alarm.audioId ? {
                 source: 'select',
                 id: alarm.audioId,
@@ -45,7 +47,7 @@ export function EditAlarmModal({ alarm, isOpen, onClose, onUpdate }: EditAlarmMo
         const nextTime = normalizeTime(h, m, s);
         void armAudio();
 
-        await onUpdate(alarm.id, { h: nextTime.h, m: nextTime.m, s: nextTime.s, audioId, audioDisplayName });
+        await onUpdate(alarm.id, { h: nextTime.h, m: nextTime.m, s: nextTime.s, audioId, audioDisplayName, ttsText: ttsText.trim() || null });
         onClose();
     };
 
@@ -77,6 +79,12 @@ export function EditAlarmModal({ alarm, isOpen, onClose, onUpdate }: EditAlarmMo
                     <h2 className="text-xl font-bold text-fg mb-6">แก้ไขรายการประกาศ</h2>
 
                     <form onSubmit={handleSubmit} className="space-y-6">
+                        <div>
+                            <label htmlFor="edit-tts-text" className="block text-sm font-bold text-muted mb-2">ข้อความ TTS (ไม่บังคับ)</label>
+                            <textarea id="edit-tts-text" value={ttsText} onChange={e => setTtsText(e.target.value)} rows={2}
+                                placeholder="เว้นว่างเพื่อใช้เสียงประกาศเดิมเท่านั้น"
+                                className="w-full bg-bg-soft border border-line rounded-lg p-3 focus:ring-2 focus:ring-primary focus:border-primary outline-none" />
+                        </div>
                         {/* Time Input Section */}
                         <div>
                             <label className="block text-sm font-bold text-muted mb-3 uppercase tracking-wider">

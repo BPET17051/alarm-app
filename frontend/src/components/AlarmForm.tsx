@@ -11,6 +11,7 @@ export function AlarmForm() {
     const [h, setH] = useState(new Date().getHours());
     const [m, setM] = useState(new Date().getMinutes());
     const [s, setS] = useState(0);
+    const [ttsText, setTtsText] = useState('');
 
     // Audio selection state
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -40,7 +41,7 @@ export function AlarmForm() {
 
             const nextTime = normalizeTime(h, m, s);
 
-            await addItem(nextTime.h, nextTime.m, nextTime.s, audioId, audioDisplayName);
+            await addItem(nextTime.h, nextTime.m, nextTime.s, audioId, audioDisplayName, ttsText.trim() || null);
 
             // Show success feedback
             setShowSuccess(true);
@@ -48,6 +49,7 @@ export function AlarmForm() {
 
             // Reset form
             setAudioSelection(null);
+            setTtsText('');
 
         } catch (e: unknown) {
             console.error('Operation failed', e);
@@ -151,6 +153,13 @@ export function AlarmForm() {
                             </svg>
                         </div>
                     </div>
+                </div>
+
+                <div>
+                    <label htmlFor="tts-text" className="block text-sm font-bold text-muted mb-2 tracking-wider">ข้อความ TTS (ไม่บังคับ)</label>
+                    <textarea id="tts-text" value={ttsText} onChange={e => setTtsText(e.target.value)} rows={2}
+                        placeholder="เว้นว่างเพื่อใช้เสียงประกาศเดิมเท่านั้น"
+                        className="w-full bg-bg-soft border border-line rounded-lg p-3 focus:ring-2 focus:ring-primary focus:border-primary outline-none" />
                 </div>
 
                 {/* Submit Button */}

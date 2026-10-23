@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AlarmItem } from '../types';
 import * as API from '../services/api';
-import { playAlarm, stopAlarm } from '../utils/audio';
+import { enqueueAlarm, stopAlarm } from '../utils/audio';
 
 export function useScheduler(
     items: AlarmItem[],
@@ -49,7 +49,7 @@ export function useScheduler(
                     // Play audio even when the ready indicator is false. The playback result decides status.
                     try {
                         const audioUrl = item.audioId ? API.getAudioUrl(item.audioId) : null;
-                        const result = await playAlarm(audioUrl);
+                        const result = await enqueueAlarm(audioUrl, item.ttsText);
                         if (result === 'cancelled') return;
                         markPlayed(item.id, result !== 'failed' ? 'SENT' : 'FAILED');
                     } catch (e) {
