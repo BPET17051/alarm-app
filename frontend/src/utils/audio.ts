@@ -118,7 +118,24 @@ export async function playBeepFallback(): Promise<PlaybackResult> {
     });
 }
 
+// Slower than the default rate so the announcement is easy to follow, and said twice with a pause.
+const TTS_RATE = 0.75;
+const TTS_REPEATS = 2;
+const TTS_PAUSE_MS = 1500;
+
 async function speakThai(text: string): Promise<PlaybackResult> {
+    const version = queueVersion;
+    let last: PlaybackResult = 'failed';
+    for (let pass = 0; pass < TTS_REPEATS; pass++) {
+        if (pass > 0) await new Promise<void>(resolve => window.setTimeout(resolve, TTS_PAUSE_MS));
+        if (version !== queueVersion) return 'cancelled';
+        last = await speakOnce(text, TTS_RATE);
+        if (last !== 'audio') return last;
+    }
+    return last;
+}
+
+async function speakOnce(text: string, rate: number): Promise<PlaybackResult> {
     if (!('speechSynthesis' in window)) return 'failed';
     const synth = window.speechSynthesis;
     const findThaiVoice = () => synth.getVoices().find(item => {
@@ -145,6 +162,7 @@ async function speakThai(text: string): Promise<PlaybackResult> {
         // Chrome's stable path is language-selected; assigning a cached Voice object
         // can raise speech-error on Windows even when the same voice is available.
         utterance.lang = 'th-TH';
+        utterance.rate = rate;
         // Keep a reference until the utterance ends. Chrome can drop an unreferenced utterance,
         // and then neither onend nor onerror fires.
         activeUtterance = utterance;
