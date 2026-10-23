@@ -1,8 +1,21 @@
 import type { AudioFile } from '../types';
 import type { ImportedRow, SubSlot } from './scheduleImport';
 
+export type CprCategory = 'alert' | 'change' | 'break' | 'resume' | 'examEnd';
+
+export const CPR_CATEGORY_LABELS: Record<CprCategory, string> = {
+    alert: 'เตือนก่อนจบฐาน',
+    change: 'เปลี่ยนฐาน',
+    break: 'พัก',
+    resume: 'กลับเข้าฝึก',
+    examEnd: 'หมดเวลาสอบ',
+};
+
 export interface CprAnnouncement {
     sourceRowIndex: number;
+    category: CprCategory;
+    // Where it comes from in the sheet: the practice block, the slot's time range and its Excel row.
+    source: string;
     h: number;
     m: number;
     s: number;
@@ -47,13 +60,14 @@ function breakAudio(label: string) {
     return { name: AUDIO.snackBreak, reason: 'ประกาศพักว่าง' };
 }
 
-interface Window { start: number; end: number; exam: boolean }
+interface Window { start: number; end: number; exam: boolean; label: string }
 
 interface Item {
     rowIndex: number;
     start: number;
     end: number;
     label: string;
+    windowLabel: string;
     kind: 'rotation' | 'break' | 'other';
     exam: boolean;
 }
@@ -74,12 +88,13 @@ export function buildCprAnnouncements(rows: ImportedRow[], subSlots: SubSlot[], 
             start: toSeconds(r.h, r.m),
             end: toSeconds(r.endH!, r.endM!),
             exam: slotParents.has(r.rowIndex),
+            label: r.activity.trim(),
         }));
 
     const makeItem = (rowIndex: number, start: number, end: number, label: string): Item => {
         const window = windows.find(w => start >= w.start && end <= w.end);
         const kind = label.includes(BREAK_KEYWORD) ? 'break' : window ? 'rotation' : 'other';
-        return { rowIndex, start, end, label, kind, exam: Boolean(window?.exam) };
+        return { rowIndex, start, end, label, windowLabel: window?.label ?? '', kind, exam: Boolean(window?.exam) };
     };
 
     const items: Item[] = [
@@ -92,33 +107,54 @@ export function buildCprAnnouncements(rows: ImportedRow[], subSlots: SubSlot[], 
         )),
     ];
 
-    const rotations = items.filter(i => i.kind === 'rotation');
+    // Shortest slots first, so when a slot and the block that contains it give the same announcement,
+    // the more specific slot is the one reported as the source.
+    const rotations = items
+        .filter(i => i.kind === 'rotation')
+        .sort((a, b) => (a.end - a.start) - (b.end - b.start));
     const breaks = items.filter(i => i.kind === 'break');
     const announcements = new Map<string, CprAnnouncement>();
 
-    const add = (at: number, audioName: string, reason: string, rowIndex: number) => {
+    const hm = (total: number) => {
+        const t = fromSeconds(total);
+        return `${String(t.h).padStart(2, '0')}:${String(t.m).padStart(2, '0')}`;
+    };
+    // "<practice block> · <slot range> · แถว N" so each announcement can be checked against the Excel row.
+    const describe = (item: Item) => {
+        const what = item.windowLabel || item.label.replace(/\s+/g, ' ').trim();
+        return `${what} · ${hm(item.start)}–${hm(item.end)} · แถว ${item.rowIndex}`;
+    };
+
+    const add = (at: number, category: CprCategory, audioName: string, reason: string, item: Item) => {
         const time = fromSeconds(at);
         const key = `${time.h}:${time.m}:${time.s}|${normalize(audioName)}`;
         if (announcements.has(key)) return;
-        announcements.set(key, { sourceRowIndex: rowIndex, ...time, ...findAudio(audioFiles, audioName), reason });
+        announcements.set(key, {
+            sourceRowIndex: item.rowIndex,
+            category,
+            source: describe(item),
+            ...time,
+            ...findAudio(audioFiles, audioName),
+            reason,
+        });
     };
 
     for (const slot of rotations) {
-        add(slot.end - ALERT_BEFORE_END, AUDIO.alert, 'เตือนก่อนจบฐาน', slot.rowIndex);
+        add(slot.end - ALERT_BEFORE_END, 'alert', AUDIO.alert, 'เตือนก่อนจบฐาน', slot);
 
         const startsHere = items.filter(i => i !== slot && i.start === slot.end);
         if (startsHere.some(i => i.kind === 'rotation')) {
-            add(slot.end, AUDIO.change, 'หมดเวลาฐาน เปลี่ยนฐาน', slot.rowIndex);
+            add(slot.end, 'change', AUDIO.change, 'หมดเวลาฐาน เปลี่ยนฐาน', slot);
         } else if (slot.exam && !startsHere.some(i => i.kind === 'break')) {
-            add(slot.end, AUDIO.examEnd, 'หมดเวลาสอบ', slot.rowIndex);
+            add(slot.end, 'examEnd', AUDIO.examEnd, 'หมดเวลาสอบ', slot);
         }
     }
 
     for (const brk of breaks) {
         const audio = breakAudio(brk.label);
-        add(brk.start, audio.name, audio.reason, brk.rowIndex);
+        add(brk.start, 'break', audio.name, audio.reason, brk);
         if (rotations.some(i => i.start >= brk.end)) {
-            add(brk.end, AUDIO.resume, 'กลับเข้าฝึก', brk.rowIndex);
+            add(brk.end, 'resume', AUDIO.resume, 'กลับเข้าฝึก', brk);
         }
     }
 

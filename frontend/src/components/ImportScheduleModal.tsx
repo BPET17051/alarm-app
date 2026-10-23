@@ -5,7 +5,7 @@ import type { AudioFile } from '../types';
 import { listSheetNames, parseScheduleFile, readFileAsArrayBuffer, type ImportedRow } from '../utils/scheduleImport';
 import { sanitizeAudioDisplayName } from '../utils/audio';
 import { formatDayKey } from '../utils/date';
-import { buildCprAnnouncements } from '../utils/cprRules';
+import { buildCprAnnouncements, CPR_CATEGORY_LABELS, type CprCategory } from '../utils/cprRules';
 
 interface ImportScheduleModalProps {
     isOpen: boolean;
@@ -18,6 +18,9 @@ interface RowState extends ImportedRow {
     audioId: string | null;
     audioDisplayName: string;
     ttsText: string;
+    // Only for generated CPR announcements: what kind it is and where it comes from in the sheet.
+    category?: CprCategory;
+    source?: string;
     // Set once a save attempt has run for this row. 'saved' rows are locked (can't be
     // re-imported by re-selecting them); 'failed' rows stay editable so the user can retry.
     saveStatus?: 'saved' | 'failed';
@@ -32,6 +35,30 @@ function timeKey(r: { h: number; m: number; s: number }) {
 
 function formatHm(h: number, m: number) {
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+const THAI_MONTHS: Array<[string, string]> = [
+    ['มกราคม', 'ม.ค.'], ['กุมภาพันธ์', 'ก.พ.'], ['มีนาคม', 'มี.ค.'], ['เมษายน', 'เม.ย.'],
+    ['พฤษภาคม', 'พ.ค.'], ['มิถุนายน', 'มิ.ย.'], ['กรกฎาคม', 'ก.ค.'], ['สิงหาคม', 'ส.ค.'],
+    ['กันยายน', 'ก.ย.'], ['ตุลาคม', 'ต.ค.'], ['พฤศจิกายน', 'พ.ย.'], ['ธันวาคม', 'ธ.ค.'],
+];
+
+// Reads a course date written in the file name, e.g. "(26 ต.ค. 2569)" or "26 ตุลาคม 2569" (พ.ศ. → ค.ศ.).
+// Returns null when the name has no date, so the caller never has to guess.
+function dateFromFileName(name: string): string | null {
+    for (let i = 0; i < THAI_MONTHS.length; i++) {
+        for (const month of THAI_MONTHS[i]) {
+            const escaped = month.replace(/\./g, '\\.');
+            const match = name.match(new RegExp(`(\\d{1,2})\\s*${escaped}\\s*(\\d{4})`));
+            if (!match) continue;
+            const year = Number(match[2]) > 2400 ? Number(match[2]) - 543 : Number(match[2]);
+            const date = new Date(year, i, Number(match[1]));
+            if (date.getFullYear() === year && date.getMonth() === i && date.getDate() === Number(match[1])) {
+                return formatDayKey(date);
+            }
+        }
+    }
+    return null;
 }
 
 export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProps) {
@@ -51,6 +78,9 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
     const [sheetName, setSheetName] = useState('');
     const [courseDate, setCourseDate] = useState<string | null>(null);
     const [skippedCount, setSkippedCount] = useState(0);
+    // Rows whose TTS text box is open (the box is hidden behind a button to keep the list short).
+    const [ttsOpen, setTtsOpen] = useState<Set<number>>(new Set());
+    const [sheetPrompt, setSheetPrompt] = useState<string | null>(null);
     // Kept so changing the worksheet re-parses the same file without asking the user to re-pick it.
     const fileBufferRef = useRef<ArrayBuffer | null>(null);
 
@@ -67,6 +97,8 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
         setSheetName('');
         setCourseDate(null);
         setSkippedCount(0);
+        setTtsOpen(new Set());
+        setSheetPrompt(null);
         fileBufferRef.current = null;
         API.getAudioFiles().then(setAudioFiles).catch(() => setAudioFiles([]));
     }, [isOpen]);
@@ -115,6 +147,8 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
             return;
         }
         setFileError(null);
+        setSheetPrompt(null);
+        setTtsOpen(new Set());
         setSheetName(parsed.sheetName);
         setCourseDate(parsed.courseDate);
         setSkippedCount(parsed.skippedDetailRows);
@@ -129,6 +163,8 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
                 rawDate: parsed.courseDate ?? '',
                 rawTime: formatHm(a.h, a.m),
                 activity: a.reason,
+                category: a.category,
+                source: a.source,
                 room: '',
                 status: 'ok' as const,
                 h: a.h,
@@ -166,7 +202,27 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
             fileBufferRef.current = buffer;
             const names = listSheetNames(buffer, file.name);
             setSheetNames(names);
-            loadSheet(buffer, file.name, names[0]);
+
+            // Pick the worksheet automatically only when it is unambiguous: a single sheet, or exactly one
+            // sheet whose course date equals the date written in the file name. Otherwise the user chooses.
+            let chosen = names.length === 1 ? names[0] : null;
+            const fileDate = dateFromFileName(file.name);
+            if (!chosen && fileDate) {
+                const matches = names.filter(n => parseScheduleFile(buffer, file.name, n).courseDate === fileDate);
+                if (matches.length === 1) chosen = matches[0];
+            }
+            if (chosen) {
+                loadSheet(buffer, file.name, chosen);
+            } else {
+                setSheetName('');
+                setCourseDate(null);
+                setRows([]);
+                setSummary(null);
+                setSheetPrompt(fileDate
+                    ? `ชื่อไฟล์ระบุวันที่ ${fileDate} แต่ไม่มีชีตเดียวที่ตรงกัน กรุณาเลือกชีตเอง`
+                    : 'ไฟล์นี้มีหลายชีตและชื่อไฟล์ไม่ระบุวันที่ กรุณาเลือกชีตที่ตรงกับคอร์ส');
+                setStage('preview');
+            }
         } catch (e) {
             console.error('Failed to parse schedule file', e);
             setFileError('อ่านไฟล์ไม่สำเร็จ ตรวจสอบว่าไฟล์ไม่เสียหายและเป็นรูปแบบ .xlsx หรือ .csv');
@@ -191,6 +247,10 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
         audioDisplayName: r.audioDisplayName || r.activity,
         ttsText: r.ttsText.trim() || null,
     }));
+    // Count of the selected generated announcements per type, in a fixed order.
+    const categoryCounts = (Object.keys(CPR_CATEGORY_LABELS) as CprCategory[])
+        .map(category => [category, rows.filter(r => r.category === category && r.selected).length] as [CprCategory, number])
+        .filter(([, count]) => count > 0);
     const canSaveTemplate = templateItems.length > 0 && templateName.trim() !== '' && stage === 'preview';
 
     // Saves the selected rows as a template only. It never touches the channel's alarms.
@@ -246,7 +306,7 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
             aria-labelledby="import-modal-title"
         >
             <div
-                className="bg-card border border-line rounded-2xl w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl animate-scale-in"
+                className="bg-card border border-line rounded-2xl w-full max-w-5xl max-h-[92vh] flex flex-col shadow-2xl animate-scale-in"
                 onClick={(e) => e.stopPropagation()}
             >
                 <div className="flex items-center justify-between p-6 border-b border-line/50">
@@ -260,14 +320,14 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
                     )}
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-6">
+                <div className="flex-1 min-h-0 overflow-y-auto p-6">
                     {stage === 'pick' && (
                         <div className="space-y-4">
                             <p className="text-sm text-muted">
                                 อัปโหลดไฟล์ .xlsx หรือ .csv ที่มีคอลัมน์ <strong>วันที่, เวลา, กิจกรรม, ห้อง</strong> (ชื่อคอลัมน์ภาษาอังกฤษ date/time/activity/room ก็ใช้ได้)
                             </p>
                             <p className="text-xs text-muted/70">
-                                เวอร์ชันนี้นำเข้าได้เฉพาะรายการของ "วันนี้" เท่านั้น รายการวันอื่นจะแสดงในตารางแต่เลือกไม่ได้
+                                ดูตัวอย่างและบันทึกเป็น Template ได้ทุกวันที่ แต่เพิ่มเข้าตารางประกาศได้เฉพาะคอร์สของ "วันนี้"
                             </p>
                             <div
                                 className="border-2 border-dashed border-line rounded-xl p-10 text-center hover:bg-bg-soft/30 transition-colors cursor-pointer"
@@ -317,10 +377,11 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
                                         <select
                                             value={sheetName}
                                             disabled={stage === 'saving'}
-                                            onChange={e => fileBufferRef.current && loadSheet(fileBufferRef.current, fileName, e.target.value)}
+                                            onChange={e => e.target.value && fileBufferRef.current && loadSheet(fileBufferRef.current, fileName, e.target.value)}
                                             className="bg-bg-soft border border-line rounded px-2 py-1 text-fg"
                                             aria-label="เลือกชีต"
                                         >
+                                            {sheetName === '' && <option value="">— เลือกชีต —</option>}
                                             {sheetNames.map(name => (
                                                 <option key={name} value={name}>{name}</option>
                                             ))}
@@ -341,6 +402,20 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
                                 </p>
                             )}
 
+                            {sheetPrompt && (
+                                <p className="text-sm text-amber-500 bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">{sheetPrompt}</p>
+                            )}
+
+                            {categoryCounts.length > 0 && (
+                                <div className="flex flex-wrap gap-2 text-xs" aria-label="สรุปตามประเภทประกาศ">
+                                    {categoryCounts.map(([category, count]) => (
+                                        <span key={category} className="px-2 py-1 rounded-md bg-bg-soft border border-line text-muted">
+                                            {CPR_CATEGORY_LABELS[category]} <strong className="text-fg">{count}</strong>
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
+
                             {summary && (
                                 <div className={`text-sm rounded-lg p-3 border ${summary.failed === 0
                                     ? 'bg-green-500/10 border-green-500/30 text-green-500'
@@ -357,9 +432,9 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
                                 </div>
                             )}
 
-                            <div className="border border-line rounded-lg overflow-hidden">
+                            <div className="border border-line rounded-lg overflow-auto max-h-[45vh]">
                                 <table className="w-full text-sm">
-                                    <thead className="bg-bg-soft/50 text-xs text-muted uppercase tracking-wide">
+                                    <thead className="sticky top-0 z-10 bg-card text-xs text-muted uppercase tracking-wide shadow-[0_1px_0_0_var(--color-line,#334155)]">
                                         <tr>
                                             <th className="p-2 w-10"></th>
                                             <th className="p-2 text-left">วันที่</th>
@@ -413,10 +488,29 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
                                                             </div>
                                                         )}
                                                     </td>
-                                                    <td className="p-2 align-top min-w-[180px] max-w-[260px] whitespace-normal break-words" title={r.activity}>
-                                                        <div>{r.activity || '-'}</div>
-                                                        {canSelect && <input value={r.ttsText} onChange={e => updateRow(r.key, { ttsText: e.target.value })}
-                                                            placeholder="ข้อความ TTS (ถ้าต้องการ)" className="mt-1 w-full bg-bg-soft border border-line rounded px-1 py-1 text-xs" />}
+                                                    <td className="p-2 align-top min-w-[220px] max-w-[320px] whitespace-normal break-words">
+                                                        <div className="font-semibold">{r.activity || '-'}</div>
+                                                        {r.source && <div className="text-xs text-muted mt-0.5">{r.source}</div>}
+                                                        {!r.source && r.status === 'ok' && <div className="text-xs text-muted/70 mt-0.5">แถว {r.rowIndex}</div>}
+                                                        {canSelect && (
+                                                            ttsOpen.has(r.key) ? (
+                                                                <input
+                                                                    value={r.ttsText}
+                                                                    onChange={e => updateRow(r.key, { ttsText: e.target.value })}
+                                                                    placeholder="ข้อความ TTS (ถ้าต้องการ)"
+                                                                    aria-label="ข้อความ TTS"
+                                                                    className="mt-1 w-full bg-bg-soft border border-line rounded px-1 py-1 text-xs"
+                                                                />
+                                                            ) : (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setTtsOpen(prev => new Set(prev).add(r.key))}
+                                                                    className="mt-1 text-xs text-primary hover:underline"
+                                                                >
+                                                                    {r.ttsText.trim() ? `แก้ข้อความ: ${r.ttsText.trim()}` : 'แก้ข้อความ'}
+                                                                </button>
+                                                            )
+                                                        )}
                                                     </td>
                                                     <td className="p-2 align-top max-w-[120px] truncate" title={r.room}>{r.room || '-'}</td>
                                                     <td className="p-2 align-top">
@@ -431,7 +525,8 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
                                                                         audioDisplayName: audio ? sanitizeAudioDisplayName(audio.displayName) : '',
                                                                     });
                                                                 }}
-                                                                className="bg-bg-soft border border-line rounded px-2 py-1 text-xs max-w-[140px]"
+                                                                className="bg-bg-soft border border-line rounded px-2 py-1 text-xs w-full min-w-[200px]"
+                                                                aria-label="เลือกเสียง"
                                                             >
                                                                 <option value="">เสียงมาตรฐาน</option>
                                                                 {audioFiles.map(a => (
@@ -439,6 +534,11 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
                                                                 ))}
                                                             </select>
                                                         ) : '-'}
+                                                        {canSelect && (
+                                                            <div className={`text-xs mt-1 whitespace-normal break-words ${r.audioId ? 'text-fg' : 'text-amber-500'}`}>
+                                                                {r.audioId ? r.audioDisplayName : r.audioDisplayName ? `ไม่พบเสียง "${r.audioDisplayName}" ในคลัง` : 'เสียงมาตรฐาน'}
+                                                            </div>
+                                                        )}
                                                     </td>
                                                     <td className="p-2 align-top text-xs">
                                                         {isSaved ? (
@@ -462,7 +562,7 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
                                 </table>
                             </div>
 
-                            {selectableRows.length === 0 && !summary && (
+                            {rows.length > 0 && selectableRows.length === 0 && !summary && (
                                 <p className="text-sm text-muted">ไม่พบรายการของวันนี้ในไฟล์นี้ (เวอร์ชันนี้นำเข้าได้เฉพาะวันนี้)</p>
                             )}
                             {hasBlockingWarnings && (
@@ -474,7 +574,7 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
                     )}
                 </div>
 
-                <div className="flex flex-wrap items-center justify-end gap-3 p-6 border-t border-line/50">
+                <div className="shrink-0 flex flex-wrap items-center gap-3 px-6 py-4 border-t border-line/50">
                     {stage === 'preview' && (
                         <>
                             <button onClick={onClose} className="px-4 py-2 rounded-lg hover:bg-white/5 transition-colors">
@@ -499,9 +599,6 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
                                     บันทึก Template ({templateItems.length})
                                 </button>
                             </div>
-                            {templateSaved && (
-                                <p className="w-full text-sm text-green-500">{templateSaved}</p>
-                            )}
                             <button
                                 onClick={handleSave}
                                 disabled={selectedCount === 0 || hasBlockingWarnings || !isCourseToday}
@@ -510,6 +607,14 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
                             >
                                 เพิ่มเข้าตารางวันนี้ ({selectedCount})
                             </button>
+                            {selectedCount > 0 && !isCourseToday && (
+                                <p className="w-full text-xs text-muted text-right">
+                                    ปุ่ม "เพิ่มเข้าตารางวันนี้" ปิดอยู่ เพราะวันคอร์ส ({courseDate ?? 'ไม่ทราบ'}) ไม่ใช่วันนี้ — ใช้ "บันทึก Template" เพื่อเก็บไว้ใช้วันคอร์ส
+                                </p>
+                            )}
+                            {templateSaved && (
+                                <p className="w-full text-sm text-green-500 text-right">{templateSaved}</p>
+                            )}
                         </>
                     )}
                     {stage === 'saving' && (
