@@ -38,6 +38,7 @@ export type PlaybackResult = 'audio' | 'beep' | 'failed' | 'cancelled';
 
 const activePlaybacks = new Set<() => void>();
 let queueVersion = 0;
+let activeUtterance: SpeechSynthesisUtterance | null = null;
 let playbackQueue: Promise<PlaybackResult> = Promise.resolve('cancelled');
 
 export function stopAlarm() {
@@ -144,13 +145,39 @@ async function speakThai(text: string): Promise<PlaybackResult> {
         // Chrome's stable path is language-selected; assigning a cached Voice object
         // can raise speech-error on Windows even when the same voice is available.
         utterance.lang = 'th-TH';
+        // Keep a reference until the utterance ends. Chrome can drop an unreferenced utterance,
+        // and then neither onend nor onerror fires.
+        activeUtterance = utterance;
+        let started = false;
+        let finished = false;
+        let watchdog = 0;
         const finish = (result: PlaybackResult) => {
+            if (finished) return;
+            finished = true;
+            window.clearTimeout(watchdog);
             activePlaybacks.delete(cancel);
+            if (activeUtterance === utterance) activeUtterance = null;
             resolve(result);
         };
+        utterance.onstart = () => {
+            started = true;
+            console.debug('TTS speech started');
+        };
         utterance.onend = () => finish('audio');
-        utterance.onerror = () => finish('failed');
-        const cancel = () => { synth.cancel(); finish('cancelled'); };
+        utterance.onerror = (event) => {
+            console.warn('TTS speech error:', event.error);
+            finish('failed');
+        };
+        // Allow browser startup plus a generous speaking rate for long Thai text.
+        watchdog = window.setTimeout(() => {
+            console.warn(`TTS watchdog timeout (${started ? 'started' : 'not-started'}); stopping current utterance.`);
+            if (activeUtterance === utterance) synth.cancel();
+            finish('failed');
+        }, 5000 + text.length * 500);
+        const cancel = () => {
+            if (activeUtterance === utterance) synth.cancel();
+            finish('cancelled');
+        };
         activePlaybacks.add(cancel);
         synth.speak(utterance);
     });
