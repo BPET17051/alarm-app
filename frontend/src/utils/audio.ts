@@ -118,19 +118,56 @@ export async function playBeepFallback(): Promise<PlaybackResult> {
     });
 }
 
-// Slower than the default rate so the announcement is easy to follow, and said twice with a pause.
-const TTS_RATE = 0.75;
+// Slower than the default rate so the announcement is easy to follow, and said twice with pauses.
+const TTS_RATE = 0.85;
 const TTS_REPEATS = 2;
-const TTS_PAUSE_MS = 1500;
+const TTS_PHRASE_PAUSE_MS = 400; // between short phrases (split by a comma)
+const TTS_GROUP_PAUSE_MS = 900; // between groups / rooms (split by a new line)
+const TTS_REPEAT_PAUSE_MS = 2000; // before the whole message is said again
+
+// A line break separates groups, a comma separates short phrases inside a group. Words are never
+// split any other way. Text without either separator stays a single phrase and is read continuously.
+export function splitTtsText(text: string): string[][] {
+    return text
+        .split(/\r?\n/)
+        .map(line => line.split(/[,，]/).map(phrase => phrase.trim()).filter(Boolean))
+        .filter(phrases => phrases.length > 0);
+}
+
+// Waits without blocking Stop: stopAlarm() cancels it like any other playback. Resolves false when cancelled.
+function pause(ms: number): Promise<boolean> {
+    return new Promise(resolve => {
+        const timer = window.setTimeout(() => {
+            activePlaybacks.delete(cancel);
+            resolve(true);
+        }, ms);
+        const cancel = () => {
+            window.clearTimeout(timer);
+            activePlaybacks.delete(cancel);
+            resolve(false);
+        };
+        activePlaybacks.add(cancel);
+    });
+}
 
 async function speakThai(text: string): Promise<PlaybackResult> {
     const version = queueVersion;
+    const groups = splitTtsText(text);
     let last: PlaybackResult = 'failed';
     for (let pass = 0; pass < TTS_REPEATS; pass++) {
-        if (pass > 0) await new Promise<void>(resolve => window.setTimeout(resolve, TTS_PAUSE_MS));
-        if (version !== queueVersion) return 'cancelled';
-        last = await speakOnce(text, TTS_RATE);
-        if (last !== 'audio') return last;
+        if (pass > 0 && !(await pause(TTS_REPEAT_PAUSE_MS))) return 'cancelled';
+        for (let g = 0; g < groups.length; g++) {
+            for (let p = 0; p < groups[g].length; p++) {
+                if (g > 0 || p > 0) {
+                    const gap = p === 0 ? TTS_GROUP_PAUSE_MS : TTS_PHRASE_PAUSE_MS;
+                    if (!(await pause(gap))) return 'cancelled';
+                }
+                if (version !== queueVersion) return 'cancelled';
+                // Each phrase is spoken to its end (queue + watchdog of speakOnce) before the next pause starts.
+                last = await speakOnce(groups[g][p], TTS_RATE);
+                if (last !== 'audio') return last;
+            }
+        }
     }
     return last;
 }
