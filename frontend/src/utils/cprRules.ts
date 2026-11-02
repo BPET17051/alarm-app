@@ -12,6 +12,10 @@ export const CPR_CATEGORY_LABELS: Record<CprCategory, string> = {
 };
 
 export interface CprAnnouncement {
+    // Draft spoken text, one group per line ("กลุ่ม 1, เข้า Station 2"), built only from what the sheet shows.
+    // Empty when it cannot be built; `ttsNote` then tells the staff why they must type it themselves.
+    ttsDraft: string;
+    ttsNote?: string;
     sourceRowIndex: number;
     category: CprCategory;
     // Where it comes from in the sheet: the practice block, the slot's time range and its Excel row.
@@ -76,6 +80,25 @@ interface Item {
     exam: boolean;
 }
 
+// Draft for the slot that starts at `at`: which group goes to which station, read from the sheet's own cells.
+// Nothing is invented: if the slot lists no groups, or a group has no station label above it, no text is made.
+function groupsDraft(at: number, items: Item[], rows: ImportedRow[]): { text: string; note?: string } {
+    const starters = items
+        .filter(i => i.kind === 'rotation' && i.start === at)
+        .sort((a, b) => (a.end - a.start) - (b.end - b.start));
+    const row = starters
+        .map(i => rows.find(r => r.rowIndex === i.rowIndex))
+        .find(r => r?.groups && r.groups.length > 0);
+    if (!row?.groups) {
+        return { text: '', note: 'ตารางไม่ระบุกลุ่ม/ห้องของช่วงถัดไป — พิมพ์ข้อความ TTS เองถ้าต้องการ' };
+    }
+    const missing = row.groups.filter(g => !g.station);
+    if (missing.length > 0) {
+        return { text: '', note: `ไม่พบป้าย Station/ห้องของ ${missing.map(g => g.group).join(', ')} ในตาราง — พิมพ์ข้อความ TTS เอง` };
+    }
+    return { text: row.groups.map(g => `${g.group}, เข้า ${g.station}`).join('\n') };
+}
+
 // Builds the announcement list from the course table, using only the structure in the sheet:
 // - a practice window is a block labelled "ฝึกปฏิบัติ", or a block that holds exam sub-slots
 // - inside a window, each rotation slot warns 10 minutes before its end
@@ -134,7 +157,11 @@ function analyze(rows: ImportedRow[], subSlots: SubSlot[], audioFiles: AudioFile
         const time = fromSeconds(at);
         const key = `${time.h}:${time.m}:${time.s}|${normalize(audioName)}`;
         if (announcements.has(key)) return;
+        // Only announcements that send groups to a new station get a draft; alerts, breaks and exam end never do.
+        const draft = category === 'change' || category === 'resume' ? groupsDraft(at, items, rows) : { text: '' };
         announcements.set(key, {
+            ttsDraft: draft.text,
+            ttsNote: draft.note,
             sourceRowIndex: item.rowIndex,
             category,
             source: describe(item),

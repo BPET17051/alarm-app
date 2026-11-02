@@ -18,6 +18,11 @@ interface RowState extends ImportedRow {
     audioId: string | null;
     audioDisplayName: string;
     ttsText: string;
+    // Why no draft text could be made for this row (the staff type it themselves).
+    ttsNote?: string;
+    // Identifies this announcement inside its worksheet, so a staff edit can be found again after the
+    // sheet is reloaded.
+    ttsKey?: string;
     // Only for generated CPR announcements: what kind it is and where it comes from in the sheet.
     category?: CprCategory;
     source?: string;
@@ -87,6 +92,9 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
     const [ruleNotes, setRuleNotes] = useState<string[]>([]);
     // Kept so changing the worksheet re-parses the same file without asking the user to re-pick it.
     const fileBufferRef = useRef<ArrayBuffer | null>(null);
+    // TTS text the staff typed or changed, kept per worksheet and announcement for the loaded file only.
+    // A draft is generated only for announcements that are not in here, so edits are never overwritten.
+    const ttsEditsRef = useRef<Record<string, Record<string, string>>>({});
 
     useEffect(() => {
         if (!isOpen) return;
@@ -106,6 +114,7 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
         setScheduleWarnings([]);
         setRuleNotes([]);
         fileBufferRef.current = null;
+        ttsEditsRef.current = {};
         API.getAudioFiles().then(setAudioFiles).catch(() => setAudioFiles([]));
     }, [isOpen]);
 
@@ -164,6 +173,9 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
         setSummary(null);
         const isToday = parsed.courseDate === formatDayKey(new Date());
         const announcements = buildCprAnnouncements(parsed.rows, parsed.subSlots, audioFiles);
+        const edited = ttsEditsRef.current[parsed.sheetName] ?? {};
+        const ttsKeyOf = (a: { h: number; m: number; s: number; category: string; sourceRowIndex: number }) =>
+            `${a.h}:${a.m}:${a.s}|${a.category}|${a.sourceRowIndex}`;
         if (announcements.length > 0) {
             // CPR course: the preview lists the generated announcements, pre-selected, to review and edit.
             setRows(announcements.map((a, idx) => ({
@@ -183,8 +195,15 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
                 selected: true,
                 audioId: a.audioId,
                 audioDisplayName: a.audioDisplayName,
-                ttsText: '',
+                // A staff edit for this sheet wins; a draft is used only when the row was never edited.
+                ttsText: edited[ttsKeyOf(a)] ?? a.ttsDraft,
+                ttsNote: a.ttsNote,
+                ttsKey: ttsKeyOf(a),
             })));
+            // Show the box for every row that has a draft, an edit, or needs typing, so nothing is hidden.
+            setTtsOpen(new Set(announcements
+                .map((a, idx) => ((edited[ttsKeyOf(a)] ?? a.ttsDraft) || a.ttsNote ? idx : -1))
+                .filter(k => k >= 0)));
         } else {
             setRows(parsed.rows.map((r, idx) => ({
                 ...r,
@@ -192,13 +211,16 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
                 selected: false,
                 audioId: null,
                 audioDisplayName: '',
-                ttsText: '',
+                ttsKey: `row|${r.rowIndex}`,
+                ttsText: edited[`row|${r.rowIndex}`] ?? '',
             })));
         }
         setStage('preview');
     };
 
     const handleFile = async (file: File) => {
+        // A new file starts clean: no draft or edit from the previous file may carry over.
+        ttsEditsRef.current = {};
         setFileError(null);
         setFileName(file.name);
         if (!/\.(xlsx|xls|csv)$/i.test(file.name)) {
@@ -235,6 +257,15 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
             console.error('Failed to parse schedule file', e);
             setFileError('อ่านไฟล์ไม่สำเร็จ ตรวจสอบว่าไฟล์ไม่เสียหายและเป็นรูปแบบ .xlsx หรือ .csv');
         }
+    };
+
+    // A change to the TTS text is remembered for this worksheet, even when it is cleared on purpose.
+    const editTts = (row: RowState, value: string) => {
+        if (row.ttsKey) {
+            const all = ttsEditsRef.current;
+            ttsEditsRef.current = { ...all, [sheetName]: { ...(all[sheetName] ?? {}), [row.ttsKey]: value } };
+        }
+        updateRow(row.key, { ttsText: value });
     };
 
     const updateRow = (key: number, patch: Partial<RowState>) => {
@@ -520,20 +551,26 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
                                                         {!r.source && r.status === 'ok' && <div className="text-xs text-muted/70 mt-0.5">แถว {r.rowIndex}</div>}
                                                         {canSelect && (
                                                             ttsOpen.has(r.key) ? (
-                                                                <input
-                                                                    value={r.ttsText}
-                                                                    onChange={e => updateRow(r.key, { ttsText: e.target.value })}
-                                                                    placeholder="ข้อความ TTS (ถ้าต้องการ)"
-                                                                    aria-label="ข้อความ TTS"
-                                                                    className="mt-1 w-full bg-bg-soft border border-line rounded px-1 py-1 text-xs"
-                                                                />
+                                                                <div className="mt-1">
+                                                                    {r.ttsNote && !r.ttsText.trim() && (
+                                                                        <div className="text-xs text-amber-500 mb-1">{r.ttsNote}</div>
+                                                                    )}
+                                                                    <textarea
+                                                                        value={r.ttsText}
+                                                                        onChange={e => editTts(r, e.target.value)}
+                                                                        rows={Math.min(6, Math.max(2, r.ttsText.split('\n').length))}
+                                                                        placeholder="ข้อความ TTS (ขึ้นบรรทัดใหม่ = เว้นกลุ่ม, จุลภาค = เว้นวลี)"
+                                                                        aria-label="ข้อความ TTS"
+                                                                        className="w-full bg-bg-soft border border-line rounded px-1 py-1 text-xs"
+                                                                    />
+                                                                </div>
                                                             ) : (
                                                                 <button
                                                                     type="button"
                                                                     onClick={() => setTtsOpen(prev => new Set(prev).add(r.key))}
                                                                     className="mt-1 text-xs text-primary hover:underline"
                                                                 >
-                                                                    {r.ttsText.trim() ? `แก้ข้อความ: ${r.ttsText.trim()}` : 'แก้ข้อความ'}
+                                                                    {r.ttsText.trim() ? `แก้ข้อความ: ${r.ttsText.trim().replace(/\s*\n\s*/g, ' / ')}` : 'แก้ข้อความ'}
                                                                 </button>
                                                             )
                                                         )}

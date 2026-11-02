@@ -39,6 +39,9 @@ export interface ImportedRow {
     // First descriptive line under the previous timed row (e.g. "Skill station 4 stations"); helps to
     // tell apart rows that only say "กลุ่ม 1". Empty when the sheet has none.
     context?: string;
+    // Groups listed on this row, one per station column, with the Station/room label printed above that
+    // column in the sheet. `station` is null when the sheet shows no such label, never a guess.
+    groups?: Array<{ group: string; station: string | null }>;
     isToday: boolean;
 }
 
@@ -216,6 +219,40 @@ function findCourseDate(grid: unknown[][]): string | null {
 
 function isNumericText(text: string) {
     return /^[\d.,\s]+$/.test(text);
+}
+
+const GROUP_CELL = /^กลุ่ม\s*\d/;
+// Labels that name where a group goes: "Station 2", "(S1)", "ห้อง 3". Anything else is not used.
+const STATION_CELL = /^(station\s*\d+|\(?\s*s\d+\s*\)?|ห้อง\s*\d+)$/i;
+const STATION_SEARCH_ROWS = 40;
+
+function normalizeStation(text: string): string {
+    const t = text.trim();
+    const bracket = t.match(/^\(?\s*(s\d+)\s*\)?$/i);
+    return bracket ? bracket[1].toUpperCase() : t.replace(/\s+/g, ' ');
+}
+
+// Reads the groups written across one row. Cells merged over several columns count once.
+function readGroups(grid: unknown[][], rowIdx: number, skipCols: number[]): Array<{ group: string; station: string | null }> {
+    const line = grid[rowIdx] ?? [];
+    const groups: Array<{ group: string; station: string | null }> = [];
+    let lastText = '';
+    let lastCol = -2;
+    line.forEach((cell, c) => {
+        if (skipCols.includes(c)) return;
+        const text = cellText(cell);
+        if (!GROUP_CELL.test(text)) return;
+        if (text === lastText && c === lastCol + 1) { lastCol = c; return; }
+        lastText = text;
+        lastCol = c;
+        let station: string | null = null;
+        for (let r = rowIdx - 1; r >= Math.max(0, rowIdx - STATION_SEARCH_ROWS) && station === null; r--) {
+            const above = cellText((grid[r] ?? [])[c]);
+            if (STATION_CELL.test(above)) station = normalizeStation(above);
+        }
+        groups.push({ group: text.replace(/\s+/g, ' '), station });
+    });
+    return groups;
 }
 
 // Picks the time column and the activity column for a sheet without a header row.
@@ -446,6 +483,7 @@ export function parseScheduleFile(buffer: ArrayBuffer, fileName: string, sheetNa
             endH: range?.end.h,
             endM: range?.end.m,
             context,
+            groups: readGroups(grid, i, [structure.timeCol]),
             isToday: courseDate === todayKey,
         });
         wantContext = true;
