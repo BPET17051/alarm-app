@@ -36,6 +36,9 @@ export interface ImportedRow {
     // End time, only present when the source gives a range.
     endH?: number;
     endM?: number;
+    // First descriptive line under the previous timed row (e.g. "Skill station 4 stations"); helps to
+    // tell apart rows that only say "กลุ่ม 1". Empty when the sheet has none.
+    context?: string;
     isToday: boolean;
 }
 
@@ -50,6 +53,8 @@ export interface SubSlot {
 export interface ParsedSchedule {
     rows: ImportedRow[];
     subSlots: SubSlot[];
+    // Problems found in the sheet itself (e.g. a row whose time goes backwards). Reported, never auto-fixed.
+    warnings: string[];
     sheetName: string;
     courseDate: string | null; // YYYY-MM-DD read from the Thai title, if found
     skippedDetailRows: number; // sub-rows (no time) that were intentionally skipped
@@ -326,6 +331,7 @@ export function parseScheduleFile(buffer: ArrayBuffer, fileName: string, sheetNa
             courseDate,
             skippedDetailRows,
             subSlots,
+            warnings: [],
             columnsFound,
             missingColumns,
         };
@@ -340,6 +346,7 @@ export function parseScheduleFile(buffer: ArrayBuffer, fileName: string, sheetNa
             courseDate,
             skippedDetailRows,
             subSlots,
+            warnings: [],
             columnsFound: {},
             missingColumns: ['date', 'time', 'activity', 'room'],
         };
@@ -348,19 +355,24 @@ export function parseScheduleFile(buffer: ArrayBuffer, fileName: string, sheetNa
     // Time ranges that sit in other cells of a main row (e.g. exam sub-slots written across columns).
     const SUB_RANGE = /(\d{1,2})[.:](\d{2})\s*[-–]\s*(\d{1,2})[.:](\d{2})/;
     const seenSubSlots = new Set<string>();
+    // The row that owns the ranges found in other cells: the latest row whose time column holds a range.
+    // Detail rows right below it (e.g. "Station | 10.25 - 11.10 น. | 11.10 - 11.55 น.") belong to it.
+    let parentRow = 0;
     for (let i = 0; i < grid.length; i++) {
         const line = grid[i] ?? [];
-        if (!parseTimeRange(cellText(line[structure.timeCol]))) continue;
+        if (parseTimeRange(cellText(line[structure.timeCol]))) parentRow = i + 1;
+        else if (cellText(line[structure.timeCol]) !== '') parentRow = 0; // a note or title row ends the block
+        if (parentRow === 0) continue;
         line.forEach((cell, c) => {
             if (c === structure.timeCol || c === structure.activityCol) return;
             const text = cellText(cell);
             const match = text.match(SUB_RANGE);
             if (!match) return;
-            const key = `${i + 1}|${text}`;
+            const key = `${parentRow}|${text}`;
             if (seenSubSlots.has(key)) return;
             seenSubSlots.add(key);
             subSlots.push({
-                parentRowIndex: i + 1,
+                parentRowIndex: parentRow,
                 start: { h: Number(match[1]), m: Number(match[2]) },
                 end: { h: Number(match[3]), m: Number(match[4]) },
                 text,
@@ -368,6 +380,10 @@ export function parseScheduleFile(buffer: ArrayBuffer, fileName: string, sheetNa
         });
     }
 
+    const warnings: string[] = [];
+    let context = '';
+    let wantContext = false; // (set after the first timed row so title lines are ignored) the next descriptive detail row becomes the context of the rows after it
+    let latestStart = -1; // latest start time seen so far, to spot rows that go backwards
     for (let i = 0; i < grid.length; i++) {
         const line = grid[i] ?? [];
         const rawTime = cellText(line[structure.timeCol]);
@@ -385,6 +401,10 @@ export function parseScheduleFile(buffer: ArrayBuffer, fileName: string, sheetNa
         const single = range ? null : parseTimeText(rawTime);
         if (!range && !single) {
             if (rawTime || activity) skippedDetailRows++;
+            if (wantContext && !rawTime && activity && !isNumericText(activity)) {
+                context = activity;
+                wantContext = false;
+            }
             continue;
         }
         if (!activity) {
@@ -394,6 +414,23 @@ export function parseScheduleFile(buffer: ArrayBuffer, fileName: string, sheetNa
 
         const start = range ? { h: range.start.h, m: range.start.m, s: 0 } : single!;
         const normalized = normalizeTime(start.h, start.m, start.s);
+        const startMinutes = start.h * 60 + start.m;
+        const label = `แถว ${i + 1} (${rawTime.replace(/\s+/g, ' ')} ${activity})`;
+
+        // A time that goes backwards or a range that ends before it starts cannot be trusted. The row is
+        // reported and left out, never "corrected", because the sheet may be wrong in either place.
+        let conflict: string | undefined;
+        if (range && range.end.h * 60 + range.end.m <= startMinutes) {
+            conflict = 'เวลาสิ้นสุดไม่หลังเวลาเริ่ม';
+        } else if (latestStart >= 0 && startMinutes < latestStart) {
+            conflict = `เวลาเริ่มย้อนลำดับ (ก่อนแถวก่อนหน้าที่เริ่ม ${String(Math.floor(latestStart / 60)).padStart(2, '0')}:${String(latestStart % 60).padStart(2, '0')})`;
+        }
+        if (conflict) {
+            warnings.push(`${label}: ${conflict} — ไม่ได้สร้างประกาศจากแถวนี้ กรุณาตรวจตาราง`);
+        } else {
+            latestStart = Math.max(latestStart, startMinutes);
+        }
+        const errorReason = conflict ?? (courseDate ? undefined : 'ไม่พบวันที่คอร์สในหัวตาราง');
 
         rows.push({
             rowIndex: i + 1,
@@ -401,20 +438,23 @@ export function parseScheduleFile(buffer: ArrayBuffer, fileName: string, sheetNa
             rawTime,
             activity,
             room: '',
-            status: courseDate ? 'ok' : 'error',
-            errorReason: courseDate ? undefined : 'ไม่พบวันที่คอร์สในหัวตาราง',
+            status: errorReason ? 'error' : 'ok',
+            errorReason,
             h: normalized.h,
             m: normalized.m,
             s: normalized.s,
             endH: range?.end.h,
             endM: range?.end.m,
+            context,
             isToday: courseDate === todayKey,
         });
+        wantContext = true;
     }
 
     return {
         rows,
         subSlots,
+        warnings,
         sheetName: selectedSheet,
         courseDate,
         skippedDetailRows,

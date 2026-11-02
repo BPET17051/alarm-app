@@ -5,7 +5,7 @@ import type { AudioFile } from '../types';
 import { listSheetNames, parseScheduleFile, readFileAsArrayBuffer, type ImportedRow } from '../utils/scheduleImport';
 import { sanitizeAudioDisplayName } from '../utils/audio';
 import { formatDayKey } from '../utils/date';
-import { buildCprAnnouncements, CPR_CATEGORY_LABELS, type CprCategory } from '../utils/cprRules';
+import { buildCprAnnouncements, buildCprNotes, CPR_CATEGORY_LABELS, type CprCategory } from '../utils/cprRules';
 
 interface ImportScheduleModalProps {
     isOpen: boolean;
@@ -81,6 +81,10 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
     // Rows whose TTS text box is open (the box is hidden behind a button to keep the list short).
     const [ttsOpen, setTtsOpen] = useState<Set<number>>(new Set());
     const [sheetPrompt, setSheetPrompt] = useState<string | null>(null);
+    // Problems in the sheet itself (e.g. a time that goes backwards), shown instead of silently fixing them.
+    const [scheduleWarnings, setScheduleWarnings] = useState<string[]>([]);
+    // Observations that are not errors, e.g. a slot that ends with no announcement, left for staff to decide.
+    const [ruleNotes, setRuleNotes] = useState<string[]>([]);
     // Kept so changing the worksheet re-parses the same file without asking the user to re-pick it.
     const fileBufferRef = useRef<ArrayBuffer | null>(null);
 
@@ -99,6 +103,8 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
         setSkippedCount(0);
         setTtsOpen(new Set());
         setSheetPrompt(null);
+        setScheduleWarnings([]);
+        setRuleNotes([]);
         fileBufferRef.current = null;
         API.getAudioFiles().then(setAudioFiles).catch(() => setAudioFiles([]));
     }, [isOpen]);
@@ -148,6 +154,8 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
         }
         setFileError(null);
         setSheetPrompt(null);
+        setScheduleWarnings(parsed.warnings);
+        setRuleNotes(buildCprNotes(parsed.rows, parsed.subSlots));
         setTtsOpen(new Set());
         setSheetName(parsed.sheetName);
         setCourseDate(parsed.courseDate);
@@ -400,6 +408,24 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
                                 <p className="text-sm text-amber-500 bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
                                     ไม่พบคอลัมน์: {missingColumns.join(', ')} — แถวที่ขาดข้อมูลจะถูกทำเครื่องหมายว่าอ่านไม่ได้
                                 </p>
+                            )}
+
+                            {scheduleWarnings.length > 0 && (
+                                <div className="text-sm text-amber-500 bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 space-y-1" role="alert">
+                                    <p className="font-semibold">พบความผิดปกติในตาราง {scheduleWarnings.length} จุด (ระบบไม่แก้ให้ ต้องตรวจที่ไฟล์ต้นทาง)</p>
+                                    <ul className="list-disc pl-5">
+                                        {scheduleWarnings.map(w => <li key={w}>{w}</li>)}
+                                    </ul>
+                                </div>
+                            )}
+
+                            {ruleNotes.length > 0 && (
+                                <div className="text-sm text-sky-300 bg-sky-500/10 border border-sky-500/30 rounded-lg p-3 space-y-1">
+                                    <p className="font-semibold">ข้อสังเกต (ไม่ใช่ข้อผิดพลาด) {ruleNotes.length} จุด</p>
+                                    <ul className="list-disc pl-5">
+                                        {ruleNotes.map(n => <li key={n}>{n}</li>)}
+                                    </ul>
+                                </div>
                             )}
 
                             {sheetPrompt && (

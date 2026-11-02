@@ -37,7 +37,9 @@ const AUDIO = {
 
 const ALERT_BEFORE_END = 10 * 60;
 const PRACTICE_KEYWORD = 'ฝึกปฏิบัติ';
-const BREAK_KEYWORD = 'พัก';
+const BREAK_KEYWORDS = ['พัก', 'รับประทานอาหาร'];
+// A row that only names a group ("กลุ่ม 1", "กลุ่ม 4 - 6") is a rotation slot even without a practice block above it.
+const GROUP_LABEL = /^กลุ่ม\s*\d/;
 
 const normalize = (value: string) => value.toLowerCase().replace(/[\s._-]+/g, '');
 const toSeconds = (h: number, m: number) => h * 3600 + m * 60;
@@ -68,6 +70,8 @@ interface Item {
     end: number;
     label: string;
     windowLabel: string;
+    context: string;
+    timeText: string;
     kind: 'rotation' | 'break' | 'other';
     exam: boolean;
 }
@@ -78,7 +82,7 @@ interface Item {
 // - at the end of a slot the next item decides the audio (change station / break / exam end)
 // - a break announces its start, and its end announces returning to practice if training continues
 // Registration, briefings and blocks outside the windows produce nothing.
-export function buildCprAnnouncements(rows: ImportedRow[], subSlots: SubSlot[], audioFiles: AudioFile[]): CprAnnouncement[] {
+function analyze(rows: ImportedRow[], subSlots: SubSlot[], audioFiles: AudioFile[]): { announcements: CprAnnouncement[]; notes: string[] } {
     const timed = rows.filter(r => r.status === 'ok' && r.endH !== undefined && r.endM !== undefined);
     const slotParents = new Set(subSlots.map(s => s.parentRowIndex));
 
@@ -91,19 +95,22 @@ export function buildCprAnnouncements(rows: ImportedRow[], subSlots: SubSlot[], 
             label: r.activity.trim(),
         }));
 
-    const makeItem = (rowIndex: number, start: number, end: number, label: string): Item => {
+    const makeItem = (rowIndex: number, start: number, end: number, label: string, timeText: string, context: string): Item => {
         const window = windows.find(w => start >= w.start && end <= w.end);
-        const kind = label.includes(BREAK_KEYWORD) ? 'break' : window ? 'rotation' : 'other';
-        return { rowIndex, start, end, label, windowLabel: window?.label ?? '', kind, exam: Boolean(window?.exam) };
+        const isBreak = BREAK_KEYWORDS.some(word => label.includes(word));
+        const kind = isBreak ? 'break' : window || GROUP_LABEL.test(label.trim()) ? 'rotation' : 'other';
+        return { rowIndex, start, end, label, windowLabel: window?.label ?? '', context, timeText, kind, exam: Boolean(window?.exam) };
     };
 
     const items: Item[] = [
-        ...timed.map(r => makeItem(r.rowIndex, toSeconds(r.h, r.m), toSeconds(r.endH!, r.endM!), r.activity)),
+        ...timed.map(r => makeItem(r.rowIndex, toSeconds(r.h, r.m), toSeconds(r.endH!, r.endM!), r.activity, r.rawTime, r.context ?? '')),
         ...subSlots.map(s => makeItem(
             s.parentRowIndex,
             toSeconds(s.start.h, s.start.m),
             toSeconds(s.end.h, s.end.m),
             s.text,
+            s.text,
+            rows.find(r => r.rowIndex === s.parentRowIndex)?.context ?? '',
         )),
     ];
 
@@ -114,15 +121,13 @@ export function buildCprAnnouncements(rows: ImportedRow[], subSlots: SubSlot[], 
         .sort((a, b) => (a.end - a.start) - (b.end - b.start));
     const breaks = items.filter(i => i.kind === 'break');
     const announcements = new Map<string, CprAnnouncement>();
+    const endNotes = new Map<number, string>(); // keyed by the end time so one note is given per time
 
-    const hm = (total: number) => {
-        const t = fromSeconds(total);
-        return `${String(t.h).padStart(2, '0')}:${String(t.m).padStart(2, '0')}`;
-    };
     // "<practice block> · <slot range> · แถว N" so each announcement can be checked against the Excel row.
     const describe = (item: Item) => {
-        const what = item.windowLabel || item.label.replace(/\s+/g, ' ').trim();
-        return `${what} · ${hm(item.start)}–${hm(item.end)} · แถว ${item.rowIndex}`;
+        const clean = (text: string) => text.replace(/\s+/g, ' ').trim();
+        const what = item.windowLabel || [clean(item.context), clean(item.label)].filter(Boolean).join(' › ');
+        return `${what} · ${clean(item.timeText)} · แถว ${item.rowIndex}`;
     };
 
     const add = (at: number, category: CprCategory, audioName: string, reason: string, item: Item) => {
@@ -147,6 +152,11 @@ export function buildCprAnnouncements(rows: ImportedRow[], subSlots: SubSlot[], 
             add(slot.end, 'change', AUDIO.change, 'หมดเวลาฐาน เปลี่ยนฐาน', slot);
         } else if (slot.exam && !startsHere.some(i => i.kind === 'break')) {
             add(slot.end, 'examEnd', AUDIO.examEnd, 'หมดเวลาสอบ', slot);
+        } else if (!slot.exam && !startsHere.some(i => i.kind === 'break') && !endNotes.has(slot.end)) {
+            // The slot ends with nothing announced: no next station, no break, not an exam. There is no rule
+            // and no general "end of activity" sound is assumed, so staff decide. (Never reuse the exam sound.)
+            const t = fromSeconds(slot.end);
+            endNotes.set(slot.end, `จบ ${String(t.h).padStart(2, '0')}:${String(t.m).padStart(2, '0')} (${describe(slot)}) ยังไม่มีประกาศสิ้นสุด — เจ้าหน้าที่ตัดสินใจว่าจะเพิ่มเองหรือไม่`);
         }
     }
 
@@ -158,5 +168,17 @@ export function buildCprAnnouncements(rows: ImportedRow[], subSlots: SubSlot[], 
         }
     }
 
-    return [...announcements.values()].sort((a, b) => toSeconds(a.h, a.m) - toSeconds(b.h, b.m));
+    return {
+        announcements: [...announcements.values()].sort((a, b) => toSeconds(a.h, a.m) - toSeconds(b.h, b.m)),
+        notes: [...endNotes.entries()].sort((a, b) => a[0] - b[0]).map(([, note]) => note),
+    };
+}
+
+export function buildCprAnnouncements(rows: ImportedRow[], subSlots: SubSlot[], audioFiles: AudioFile[]): CprAnnouncement[] {
+    return analyze(rows, subSlots, audioFiles).announcements;
+}
+
+// Observations for the staff, e.g. a training slot that ends with no announcement. Not errors.
+export function buildCprNotes(rows: ImportedRow[], subSlots: SubSlot[]): string[] {
+    return analyze(rows, subSlots, []).notes;
 }
