@@ -44,6 +44,7 @@ const PRACTICE_KEYWORD = 'ฝึกปฏิบัติ';
 const BREAK_KEYWORDS = ['พัก', 'รับประทานอาหาร'];
 // A row that only names a group ("กลุ่ม 1", "กลุ่ม 4 - 6") is a rotation slot even without a practice block above it.
 const GROUP_LABEL = /^กลุ่ม\s*\d/;
+const mentionsPractice = (label: string) => label.includes(PRACTICE_KEYWORD);
 
 const normalize = (value: string) => value.toLowerCase().replace(/[\s._-]+/g, '');
 const toSeconds = (h: number, m: number) => h * 3600 + m * 60;
@@ -52,9 +53,20 @@ const fromSeconds = (total: number) => {
     return { h: Math.floor(normalized / 3600), m: Math.floor((normalized % 3600) / 60), s: normalized % 60 };
 };
 
+// Only for comparing audio names: ฎ and ฏ are the same letter here, because the library spells one sound
+// "ปฎิบัติ" while it is written "ปฏิบัติ" elsewhere. The file name and id are never changed, and no other
+// letters are folded, so names with a different meaning still do not match.
+const foldAudioName = (value: string) => normalize(value).replace(/ฎ/g, 'ฏ');
+
+// The library entry whose name equals `name` (after the folding above), or null. Exported so the preview
+// can match again when the library finishes loading after the announcements were built.
+export function findAudioByName(audioFiles: AudioFile[], name: string): AudioFile | null {
+    const target = foldAudioName(name);
+    return audioFiles.find(file => foldAudioName(file.displayName) === target) ?? null;
+}
+
 function findAudio(audioFiles: AudioFile[], name: string) {
-    const target = normalize(name);
-    const match = audioFiles.find(file => normalize(file.displayName) === target);
+    const match = findAudioByName(audioFiles, name);
     return match
         ? { audioId: match.id, audioDisplayName: match.displayName }
         : { audioId: null, audioDisplayName: name };
@@ -92,6 +104,13 @@ function groupsDraft(at: number, items: Item[], rows: ImportedRow[]): { text: st
     if (!row?.groups) {
         return { text: '', note: 'ตารางไม่ระบุกลุ่ม/ห้องของช่วงถัดไป — พิมพ์ข้อความ TTS เองถ้าต้องการ' };
     }
+    // Two different labels for one column (e.g. "Station 3" and "S2"): the sheet contradicts itself, so no
+    // label is chosen and no text is made.
+    const conflicting = row.groups.filter(g => g.stationConflict && g.stationConflict.length > 1);
+    if (conflicting.length > 0) {
+        const detail = conflicting.map(g => `${g.group}: ${g.stationConflict!.join(' กับ ')}`).join('; ');
+        return { text: '', note: `ป้าย Station ในตารางขัดแย้งกัน (${detail}) — ตรวจตารางแล้วพิมพ์ข้อความ TTS เอง` };
+    }
     const missing = row.groups.filter(g => !g.station);
     if (missing.length > 0) {
         return { text: '', note: `ไม่พบป้าย Station/ห้องของ ${missing.map(g => g.group).join(', ')} ในตาราง — พิมพ์ข้อความ TTS เอง` };
@@ -109,19 +128,46 @@ function analyze(rows: ImportedRow[], subSlots: SubSlot[], audioFiles: AudioFile
     const timed = rows.filter(r => r.status === 'ok' && r.endH !== undefined && r.endM !== undefined);
     const slotParents = new Set(subSlots.map(s => s.parentRowIndex));
 
+    // A block that is split into smaller timed rows below it (not counting breaks) is a training block even
+    // when its title has no keyword, e.g. an exam block listing its own rounds as separate time rows.
+    const isBreakText = (text: string) => BREAK_KEYWORDS.some(word => text.includes(word));
+    const splitsIntoRows = (r: ImportedRow) => {
+        const start = toSeconds(r.h, r.m);
+        const end = toSeconds(r.endH!, r.endM!);
+        return timed.filter(c => c !== r && !isBreakText(c.activity)
+            && toSeconds(c.h, c.m) >= start && toSeconds(c.endH!, c.endM!) <= end
+            && toSeconds(c.endH!, c.endM!) - toSeconds(c.h, c.m) < end - start).length >= 2;
+    };
+    const EXAM_WORDS = /สอบ|exam|test/i;
+    // A block with several child rows is only treated as a station/exam block when its own title says so.
+    // Without such a word (e.g. a lecture split into parts) nothing is announced from it.
+    const TRAINING_CONTEXT = /ฝึกปฏิบัติ|สถานี|station|สอบ|exam|test/i;
+
     const windows: Window[] = timed
-        .filter(r => r.activity.trim().startsWith(PRACTICE_KEYWORD) || slotParents.has(r.rowIndex))
+        .filter(r => r.activity.trim().startsWith(PRACTICE_KEYWORD) || slotParents.has(r.rowIndex)
+            || (splitsIntoRows(r) && TRAINING_CONTEXT.test(r.activity)))
         .map(r => ({
             start: toSeconds(r.h, r.m),
             end: toSeconds(r.endH!, r.endM!),
-            exam: slotParents.has(r.rowIndex),
+            exam: slotParents.has(r.rowIndex) || EXAM_WORDS.test(r.activity),
             label: r.activity.trim(),
         }));
 
-    const makeItem = (rowIndex: number, start: number, end: number, label: string, timeText: string, context: string): Item => {
+    // A row whose time is only a merged copy of another row's time, where that other row is a titled block
+    // (not itself a group row), is a note under that block (e.g. the groups listed under one Megacode
+    // block), not a training round of its own. This follows the merge, not equal times.
+    const isAnnotation = (r: ImportedRow) => {
+        if (r.mergedFromRow === undefined) return false;
+        const parent = rows.find(p => p.rowIndex === r.mergedFromRow);
+        return Boolean(parent && !GROUP_LABEL.test(parent.activity.trim()));
+    };
+    const annotationRows = new Set(timed.filter(isAnnotation).map(r => r.rowIndex));
+
+    const makeItem = (rowIndex: number, start: number, end: number, label: string, timeText: string, context: string, fromSubSlot = false): Item => {
         const window = windows.find(w => start >= w.start && end <= w.end);
         const isBreak = BREAK_KEYWORDS.some(word => label.includes(word));
-        const kind = isBreak ? 'break' : window || GROUP_LABEL.test(label.trim()) ? 'rotation' : 'other';
+        const groupSlot = GROUP_LABEL.test(label.trim()) && (fromSubSlot || !annotationRows.has(rowIndex));
+        const kind = isBreak ? 'break' : window || groupSlot ? 'rotation' : 'other';
         return { rowIndex, start, end, label, windowLabel: window?.label ?? '', context, timeText, kind, exam: Boolean(window?.exam) };
     };
 
@@ -134,6 +180,7 @@ function analyze(rows: ImportedRow[], subSlots: SubSlot[], audioFiles: AudioFile
             s.text,
             s.text,
             rows.find(r => r.rowIndex === s.parentRowIndex)?.context ?? '',
+            true,
         )),
     ];
 
@@ -190,7 +237,12 @@ function analyze(rows: ImportedRow[], subSlots: SubSlot[], audioFiles: AudioFile
     for (const brk of breaks) {
         const audio = breakAudio(brk.label);
         add(brk.start, 'break', audio.name, audio.reason, brk);
-        if (rotations.some(i => i.start >= brk.end)) {
+        // "Back to training" is announced when the break ends only if practice really starts then: a rotation
+        // slot begins, or a row starting at that time is about practising (e.g. "เตรียมฝึกปฏิบัติ"). A break
+        // followed only by a briefing gets no such announcement.
+        const startsAtBreakEnd = items.filter(i => i !== brk && i.start === brk.end);
+        const practiceStartsNow = startsAtBreakEnd.some(i => i.kind === 'rotation' || mentionsPractice(i.label));
+        if (practiceStartsNow && rotations.some(i => i.start >= brk.end)) {
             add(brk.end, 'resume', AUDIO.resume, 'กลับเข้าฝึก', brk);
         }
     }

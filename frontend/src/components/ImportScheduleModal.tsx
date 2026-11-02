@@ -5,7 +5,8 @@ import type { AudioFile } from '../types';
 import { listSheetNames, parseScheduleFile, readFileAsArrayBuffer, type ImportedRow } from '../utils/scheduleImport';
 import { sanitizeAudioDisplayName } from '../utils/audio';
 import { formatDayKey } from '../utils/date';
-import { buildCprAnnouncements, buildCprNotes, CPR_CATEGORY_LABELS, type CprCategory } from '../utils/cprRules';
+import { buildCprAnnouncements, buildCprNotes, findAudioByName, CPR_CATEGORY_LABELS, type CprCategory } from '../utils/cprRules';
+import { ConfirmDialog } from './ConfirmDialog';
 
 interface ImportScheduleModalProps {
     isOpen: boolean;
@@ -23,6 +24,10 @@ interface RowState extends ImportedRow {
     // Identifies this announcement inside its worksheet, so a staff edit can be found again after the
     // sheet is reloaded.
     ttsKey?: string;
+    // The sound name the rules asked for, kept so it can be matched again once the audio library has loaded.
+    wantedAudio?: string;
+    // True once the staff chose a sound themselves; the automatic match never overrides that.
+    audioTouched?: boolean;
     // Only for generated CPR announcements: what kind it is and where it comes from in the sheet.
     category?: CprCategory;
     source?: string;
@@ -78,6 +83,9 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
     const [missingColumns, setMissingColumns] = useState<string[]>([]);
     const [rows, setRows] = useState<RowState[]>([]);
     const [audioFiles, setAudioFiles] = useState<AudioFile[]>([]);
+    const [audioStatus, setAudioStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+    // Which save the staff is being asked to confirm because some selected rows have no sound.
+    const [pendingAction, setPendingAction] = useState<'template' | 'schedule' | null>(null);
     const [summary, setSummary] = useState<{ succeeded: number; failed: number; leaseLost: boolean } | null>(null);
     const [sheetNames, setSheetNames] = useState<string[]>([]);
     const [sheetName, setSheetName] = useState('');
@@ -115,8 +123,37 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
         setRuleNotes([]);
         fileBufferRef.current = null;
         ttsEditsRef.current = {};
-        API.getAudioFiles().then(setAudioFiles).catch(() => setAudioFiles([]));
+        setAudioStatus('loading');
+        setPendingAction(null);
+        API.getAudioFiles()
+            .then(files => { setAudioFiles(files); setAudioStatus('ready'); })
+            .catch(() => { setAudioFiles([]); setAudioStatus('error'); });
     }, [isOpen]);
+
+    const retryAudio = () => {
+        setAudioStatus('loading');
+        API.getAudioFiles()
+            .then(files => { setAudioFiles(files); setAudioStatus('ready'); })
+            .catch(() => { setAudioFiles([]); setAudioStatus('error'); });
+    };
+
+    // When the audio library arrives after the announcements were built (or the list changes), match the
+    // rows that still have no sound by the name the rules asked for. A sound the staff chose is left alone.
+    useEffect(() => {
+        if (audioFiles.length === 0) return;
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- returns the same rows when nothing matches, so it cannot loop
+        setRows(prev => {
+            let changed = false;
+            const next = prev.map(r => {
+                if (r.audioId || r.audioTouched || !r.wantedAudio) return r;
+                const match = findAudioByName(audioFiles, r.wantedAudio);
+                if (!match) return r;
+                changed = true;
+                return { ...r, audioId: match.id, audioDisplayName: match.displayName };
+            });
+            return changed ? next : prev;
+        });
+    }, [audioFiles, rows]);
 
     // Alarms already in the channel (loaded from the backend), refreshed after every
     // successful importItems() call — so a duplicate re-upload of the same file is caught here.
@@ -195,6 +232,7 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
                 selected: true,
                 audioId: a.audioId,
                 audioDisplayName: a.audioDisplayName,
+                wantedAudio: a.audioId ? undefined : a.audioDisplayName,
                 // A staff edit for this sheet wins; a draft is used only when the row was never edited.
                 ttsText: edited[ttsKeyOf(a)] ?? a.ttsDraft,
                 ttsNote: a.ttsNote,
@@ -334,9 +372,21 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
         setStage('preview');
     };
 
+    // Saving rows that have no sound is never silent: the staff must confirm, with the rows listed.
+    const rowsForAction = (kind: 'template' | 'schedule') => (kind === 'template' ? rows.filter(r => r.selected) : pendingSelected);
+    const requestAction = (kind: 'template' | 'schedule') => {
+        if (rowsForAction(kind).some(r => !r.audioId)) {
+            setPendingAction(kind);
+            return;
+        }
+        void (kind === 'template' ? handleSaveTemplate() : handleSave());
+    };
+    const noAudioRows = pendingAction ? rowsForAction(pendingAction).filter(r => !r.audioId) : [];
+
     if (!isOpen) return null;
 
     return (
+        <>
         <div
             className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in"
             onClick={stage === 'saving' ? undefined : onClose}
@@ -457,6 +507,18 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
                                         {ruleNotes.map(n => <li key={n}>{n}</li>)}
                                     </ul>
                                 </div>
+                            )}
+
+                            {audioStatus === 'error' && (
+                                <div className="text-sm text-danger bg-danger/10 border border-danger/30 rounded-lg p-3 flex flex-wrap items-center gap-3" role="alert">
+                                    <span className="flex-1">โหลดรายการไฟล์เสียงไม่สำเร็จ ประกาศจึงยังไม่มีเสียงที่จับคู่ให้ (ตรวจการเชื่อมต่อแล้วลองใหม่)</span>
+                                    <button type="button" onClick={retryAudio} className="px-3 py-1 rounded-lg border border-danger/50 hover:bg-danger/10 font-semibold">
+                                        ลองโหลดใหม่
+                                    </button>
+                                </div>
+                            )}
+                            {audioStatus === 'loading' && rows.length > 0 && (
+                                <p className="text-xs text-muted">กำลังโหลดรายการไฟล์เสียง…</p>
                             )}
 
                             {sheetPrompt && (
@@ -584,6 +646,7 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
                                                                 onChange={e => {
                                                                     const audio = audioFiles.find(a => a.id === e.target.value);
                                                                     updateRow(r.key, {
+                                                                        audioTouched: true,
                                                                         audioId: audio?.id ?? null,
                                                                         audioDisplayName: audio ? sanitizeAudioDisplayName(audio.displayName) : '',
                                                                     });
@@ -654,7 +717,7 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
                                     className="bg-bg-soft border border-line rounded-lg px-3 py-2 text-sm w-56"
                                 />
                                 <button
-                                    onClick={handleSaveTemplate}
+                                    onClick={() => requestAction('template')}
                                     disabled={!canSaveTemplate}
                                     title={templateItems.length === 0 ? 'เลือกรายการก่อน' : templateName.trim() === '' ? 'ใส่ชื่อ Template ก่อน' : undefined}
                                     className="px-4 py-2 rounded-xl border border-line hover:bg-white/5 font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all"
@@ -663,7 +726,7 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
                                 </button>
                             </div>
                             <button
-                                onClick={handleSave}
+                                onClick={() => requestAction('schedule')}
                                 disabled={selectedCount === 0 || hasBlockingWarnings || !isCourseToday}
                                 title={!isCourseToday ? 'เพิ่มเข้าตารางได้เฉพาะคอร์สของวันนี้ ใช้ "บันทึก Template" แทน' : hasBlockingWarnings ? 'มีรายการเวลาซ้ำ/ชนกัน แก้ไขก่อนบันทึก' : undefined}
                                 className="px-6 py-2 rounded-xl bg-primary text-white font-bold hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
@@ -686,5 +749,31 @@ export function ImportScheduleModal({ isOpen, onClose }: ImportScheduleModalProp
                 </div>
             </div>
         </div>
+        <ConfirmDialog
+            open={pendingAction !== null}
+            title={`มี ${noAudioRows.length} รายการที่ยังไม่มีเสียง`}
+            description={(
+                <div className="space-y-2">
+                    <p>รายการเหล่านี้จะเล่นเสียงมาตรฐานแทน หากบันทึกต่อ:</p>
+                    <ul className="list-disc pl-5 max-h-40 overflow-y-auto">
+                        {noAudioRows.slice(0, 12).map(r => (
+                            <li key={r.key}>
+                                {formatHm(r.h, r.m)} {r.activity}{r.wantedAudio ? ` (ไม่พบเสียง "${r.wantedAudio}" ในคลัง)` : ''}
+                            </li>
+                        ))}
+                        {noAudioRows.length > 12 && <li>…และอีก {noAudioRows.length - 12} รายการ</li>}
+                    </ul>
+                </div>
+            )}
+            confirmLabel="บันทึกทั้งที่ยังไม่มีเสียง"
+            tone="default"
+            onCancel={() => setPendingAction(null)}
+            onConfirm={() => {
+                const kind = pendingAction;
+                setPendingAction(null);
+                if (kind) void (kind === 'template' ? handleSaveTemplate() : handleSave());
+            }}
+        />
+        </>
     );
 }

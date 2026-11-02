@@ -41,7 +41,10 @@ export interface ImportedRow {
     context?: string;
     // Groups listed on this row, one per station column, with the Station/room label printed above that
     // column in the sheet. `station` is null when the sheet shows no such label, never a guess.
-    groups?: Array<{ group: string; station: string | null }>;
+    // `stationConflict` lists the different labels found for the column when the sheet contradicts itself.
+    groups?: Array<{ group: string; station: string | null; stationConflict?: string[] }>;
+    // Set when this row's time cell is only a merged copy of the time of another row (that row's number).
+    mergedFromRow?: number;
     isToday: boolean;
 }
 
@@ -78,17 +81,23 @@ export function listSheetNames(buffer: ArrayBuffer, fileName: string): string[] 
 
 // Copies the top-left value of every merged range into the cells it covers, so that
 // values hidden behind a merge (e.g. a time spanning several rows) are visible to the reader.
-function applyMerges(ws: XLSX.WorkSheet) {
+// Returns, for every cell that was filled this way, the 1-based row of the cell it was copied from, so a
+// row whose time is only a copy of the row above can be told apart from a row with its own time.
+function applyMerges(ws: XLSX.WorkSheet): Map<string, number> {
+    const copiedFrom = new Map<string, number>();
     for (const range of ws['!merges'] ?? []) {
         const top = ws[XLSX.utils.encode_cell({ r: range.s.r, c: range.s.c })];
         if (!top) continue;
         for (let r = range.s.r; r <= range.e.r; r++) {
             for (let c = range.s.c; c <= range.e.c; c++) {
                 if (r === range.s.r && c === range.s.c) continue;
-                ws[XLSX.utils.encode_cell({ r, c })] = { ...top };
+                const addr = XLSX.utils.encode_cell({ r, c });
+                ws[addr] = { ...top };
+                copiedFrom.set(addr, range.s.r + 1);
             }
         }
     }
+    return copiedFrom;
 }
 
 function cellText(cell: unknown): string {
@@ -232,10 +241,28 @@ function normalizeStation(text: string): string {
     return bracket ? bracket[1].toUpperCase() : t.replace(/\s+/g, ' ');
 }
 
+// The Station/room labels printed above a column, taken from the nearest band of non-timed rows that has
+// any (the rows between two timed rows). Different labels in that one band are a contradiction in the
+// sheet; the caller must not pick one of them.
+function stationLabelsAbove(grid: unknown[][], rowIdx: number, col: number, timeCol: number): string[] {
+    const found: string[] = [];
+    for (let r = rowIdx - 1; r >= Math.max(0, rowIdx - STATION_SEARCH_ROWS); r--) {
+        const row = grid[r] ?? [];
+        const timeText = cellText(row[timeCol]);
+        if (parseTimeRange(timeText) || parseTimeText(timeText)) {
+            if (found.length > 0) break; // reached the timed row above the band that holds the labels
+            continue; // a timed row between: keep looking further up
+        }
+        const text = cellText(row[col]);
+        if (STATION_CELL.test(text)) found.push(normalizeStation(text));
+    }
+    return [...new Set(found)];
+}
+
 // Reads the groups written across one row. Cells merged over several columns count once.
-function readGroups(grid: unknown[][], rowIdx: number, skipCols: number[]): Array<{ group: string; station: string | null }> {
+function readGroups(grid: unknown[][], rowIdx: number, skipCols: number[], timeCol: number): NonNullable<ImportedRow['groups']> {
     const line = grid[rowIdx] ?? [];
-    const groups: Array<{ group: string; station: string | null }> = [];
+    const groups: NonNullable<ImportedRow['groups']> = [];
     let lastText = '';
     let lastCol = -2;
     line.forEach((cell, c) => {
@@ -245,12 +272,12 @@ function readGroups(grid: unknown[][], rowIdx: number, skipCols: number[]): Arra
         if (text === lastText && c === lastCol + 1) { lastCol = c; return; }
         lastText = text;
         lastCol = c;
-        let station: string | null = null;
-        for (let r = rowIdx - 1; r >= Math.max(0, rowIdx - STATION_SEARCH_ROWS) && station === null; r--) {
-            const above = cellText((grid[r] ?? [])[c]);
-            if (STATION_CELL.test(above)) station = normalizeStation(above);
-        }
-        groups.push({ group: text.replace(/\s+/g, ' '), station });
+        const labels = stationLabelsAbove(grid, rowIdx, c, timeCol);
+        groups.push({
+            group: text.replace(/\s+/g, ' '),
+            station: labels.length === 1 ? labels[0] : null,
+            stationConflict: labels.length > 1 ? labels : undefined,
+        });
     });
     return groups;
 }
@@ -301,7 +328,7 @@ export function parseScheduleFile(buffer: ArrayBuffer, fileName: string, sheetNa
     const workbook = loadWorkbook(buffer, fileName);
     const selectedSheet = sheetName && workbook.SheetNames.includes(sheetName) ? sheetName : workbook.SheetNames[0];
     const sheet = workbook.Sheets[selectedSheet];
-    applyMerges(sheet);
+    const mergedCopies = applyMerges(sheet);
 
     // raw:true keeps real Date objects in xlsx (needed for date/time cells); CSV stays as text.
     const grid = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '', raw: !isCsv, blankrows: true });
@@ -483,7 +510,8 @@ export function parseScheduleFile(buffer: ArrayBuffer, fileName: string, sheetNa
             endH: range?.end.h,
             endM: range?.end.m,
             context,
-            groups: readGroups(grid, i, [structure.timeCol]),
+            groups: readGroups(grid, i, [structure.timeCol], structure.timeCol),
+            mergedFromRow: mergedCopies.get(XLSX.utils.encode_cell({ r: i, c: structure.timeCol })),
             isToday: courseDate === todayKey,
         });
         wantContext = true;
